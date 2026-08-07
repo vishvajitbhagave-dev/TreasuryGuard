@@ -433,25 +433,23 @@ export default function Home() {
     <div className="flex-1 w-full max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
       
       {/* 1. Header Section */}
-      <header className="glass-panel rounded-2xl p-6 mb-8 flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden">
-        {/* Subtle decorative glow */}
-        <div className="absolute -top-10 -left-10 w-40 h-40 bg-violet-600/10 rounded-full blur-2xl pointer-events-none"></div>
+      <header className="glass-panel rounded-xl p-5 mb-8 flex flex-col md:flex-row items-center justify-between gap-6 relative">
         
-        <div className="flex items-center gap-4 relative">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/20">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-lg bg-blue-950/40 border border-blue-900/30 flex items-center justify-center shadow-inner">
             {/* SVG Logo */}
-            <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+            <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
               VaultLink
-              <span className="text-[10px] uppercase bg-violet-950 text-violet-400 border border-violet-800 px-2 py-0.5 rounded font-mono font-medium tracking-widest pulse-glow-violet">
+              <span className="text-[9px] uppercase bg-cyan-950/40 text-cyan-400 border border-cyan-800/40 px-1.5 py-0.5 rounded font-mono font-semibold tracking-widest pulse-glow-violet">
                 Secure V2
               </span>
             </h1>
-            <p className="text-xs text-zinc-400">Soroban Multi-Signature Treasury Control</p>
+            <p className="text-xs text-slate-400 font-medium">Soroban Multi-Signature Treasury Control</p>
           </div>
         </div>
 
@@ -459,23 +457,23 @@ export default function Home() {
         <div className="flex flex-wrap items-center justify-center gap-4">
           
           {/* Toggle Network Mode */}
-          <div className="bg-zinc-950 p-1 rounded-xl border border-zinc-800 flex">
+          <div className="bg-slate-950/60 p-1 rounded-lg border border-slate-800/60 flex">
             <button
               onClick={() => setNetworkMode("simulation")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
                 networkMode === "simulation"
-                  ? "bg-violet-600 text-white shadow-md shadow-violet-500/20"
-                  : "text-zinc-400 hover:text-white"
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-500/25 border border-blue-500/30"
+                  : "text-slate-400 hover:text-slate-200"
               }`}
             >
               Simulation Sandbox
             </button>
             <button
               onClick={() => setNetworkMode("testnet")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
                 networkMode === "testnet"
-                  ? "bg-violet-600 text-white shadow-md shadow-violet-500/20"
-                  : "text-zinc-400 hover:text-white"
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-500/25 border border-blue-500/30"
+                  : "text-slate-400 hover:text-slate-200"
               }`}
             >
               Stellar Testnet
@@ -484,18 +482,18 @@ export default function Home() {
 
           {/* Identity Switcher (Simulation Only) */}
           {networkMode === "simulation" ? (
-            <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1">
-              <label htmlFor="sim-member" className="text-[10px] uppercase font-mono text-zinc-400 font-bold">Simulate As:</label>
+            <div className="flex items-center gap-2 bg-slate-900/50 border border-slate-850 rounded-lg px-3 py-1.5">
+              <label htmlFor="sim-member" className="text-[10px] uppercase font-mono text-slate-400 font-medium">Simulate As:</label>
               <select
                 id="sim-member"
                 value={activeSimUser}
                 onChange={handleUserChange}
-                className="bg-transparent text-xs text-violet-400 font-bold outline-none border-none cursor-pointer py-1"
+                className="bg-transparent text-xs text-cyan-400 font-bold outline-none border-none cursor-pointer py-0.5"
               >
-                <option value={SIM_ACCOUNTS.ALICE} className="bg-zinc-900 text-zinc-100">Alice (Member)</option>
-                <option value={SIM_ACCOUNTS.BOB} className="bg-zinc-900 text-zinc-100">Bob (Member)</option>
-                <option value={SIM_ACCOUNTS.CHARLIE} className="bg-zinc-900 text-zinc-100">Charlie (Member)</option>
-                <option value={SIM_ACCOUNTS.ADMIN} className="bg-zinc-900 text-zinc-100">Admin (Owner)</option>
+                <option value={SIM_ACCOUNTS.ALICE} className="bg-slate-900 text-slate-100">Alice (Member)</option>
+                <option value={SIM_ACCOUNTS.BOB} className="bg-slate-900 text-slate-100">Bob (Member)</option>
+                <option value={SIM_ACCOUNTS.CHARLIE} className="bg-slate-900 text-slate-100">Charlie (Member)</option>
+                <option value={SIM_ACCOUNTS.ADMIN} className="bg-slate-900 text-slate-100">Admin (Owner)</option>
               </select>
             </div>
           ) : (
@@ -511,7 +509,7 @@ export default function Home() {
                   </div>
                   <button
                     onClick={handleDisconnectWallet}
-                    className="px-3 py-1.5 border border-zinc-800 hover:border-red-900/50 hover:bg-red-950/20 hover:text-red-400 text-xs rounded-xl font-medium transition-colors"
+                    className="px-3 py-1.5 border border-zinc-800 hover:border-red-900/50 hover:bg-red-950/20 hover:text-red-400 text-xs rounded-lg font-medium transition-colors"
                   >
                     Disconnect
                   </button>
@@ -520,7 +518,7 @@ export default function Home() {
                 <button
                   onClick={handleConnectWallet}
                   disabled={loadingAction === "connect_wallet"}
-                  className="px-4 py-2 bg-gradient-to-tr from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-xs rounded-xl font-semibold shadow-lg shadow-violet-500/10 flex items-center gap-2"
+                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white text-xs rounded-lg font-semibold transition-all shadow-md shadow-blue-500/10 flex items-center gap-2 cursor-pointer border border-blue-400/20"
                 >
                   {loadingAction === "connect_wallet" ? (
                     <>
@@ -599,76 +597,76 @@ export default function Home() {
       {/* 3. Stat Dashboard Grid */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {/* Stat 1: Vault Balance */}
-        <div className="glass-panel rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between">
-          <div className="absolute top-4 right-4 text-violet-500">
-            <svg className="w-8 h-8 opacity-25" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+        <div className="glass-panel rounded-xl p-5 relative overflow-hidden flex flex-col justify-between">
+          <div className="absolute top-4 right-4 text-cyan-500/20">
+            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <span className="text-[10px] font-bold uppercase text-zinc-400 tracking-widest font-mono">Vault Reserves</span>
+          <span className="text-[10px] font-bold uppercase text-slate-400 tracking-widest font-mono">Vault Reserves</span>
           <h2 className="text-3xl font-extrabold text-white mt-2 tracking-tight">
-            {parseFloat(vaultBalance).toLocaleString()} <span className="text-xs font-semibold text-violet-400">USDC</span>
+            {parseFloat(vaultBalance).toLocaleString()} <span className="text-xs font-bold text-cyan-400 font-mono">USDC</span>
           </h2>
           {networkMode === "simulation" ? (
-            <p className="text-[10px] text-zinc-400 mt-2">
-              Your mock wallet: <span className="text-violet-400 font-bold font-mono">{parseFloat(getSimulatedUserBalance()).toLocaleString()} USDC</span>
+            <p className="text-[10px] text-slate-400 mt-2">
+              Your mock wallet: <span className="text-cyan-400 font-bold font-mono">{parseFloat(getSimulatedUserBalance()).toLocaleString()} USDC</span>
             </p>
           ) : (
-            <p className="text-[10px] text-zinc-400 mt-2">Connected network: Testnet</p>
+            <p className="text-[10px] text-slate-400 mt-2 font-medium">Connected network: <span className="text-blue-400 font-semibold font-mono">Testnet</span></p>
           )}
         </div>
 
         {/* Stat 2: Threshold approvals */}
-        <div className="glass-panel rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between">
-          <div className="absolute top-4 right-4 text-violet-500">
-            <svg className="w-8 h-8 opacity-25" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+        <div className="glass-panel rounded-xl p-5 relative overflow-hidden flex flex-col justify-between">
+          <div className="absolute top-4 right-4 text-cyan-500/20">
+            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
           </div>
-          <span className="text-[10px] font-bold uppercase text-zinc-400 tracking-widest font-mono">Signing Policy</span>
+          <span className="text-[10px] font-bold uppercase text-slate-400 tracking-widest font-mono">Signing Policy</span>
           <h2 className="text-3xl font-extrabold text-white mt-2 tracking-tight">
-            {config.threshold} <span className="text-sm font-semibold text-zinc-400">of {networkMode === "simulation" ? "3 Signers" : "2 Signers"}</span>
+            {config.threshold} <span className="text-sm font-semibold text-slate-400">of {networkMode === "simulation" ? "3 Signers" : "2 Signers"}</span>
           </h2>
-          <div className="text-[9px] text-zinc-400 mt-2 flex gap-1 items-center">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>
+          <div className="text-[9px] text-cyan-400/90 mt-2 flex gap-1.5 items-center font-semibold font-mono">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 inline-block animate-pulse"></span>
             Multi-sig enforcement Active
           </div>
         </div>
 
         {/* Stat 3: Total Requests summary */}
-        <div className="glass-panel rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between">
-          <div className="absolute top-4 right-4 text-violet-500">
-            <svg className="w-8 h-8 opacity-25" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+        <div className="glass-panel rounded-xl p-5 relative overflow-hidden flex flex-col justify-between">
+          <div className="absolute top-4 right-4 text-cyan-500/20">
+            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
             </svg>
           </div>
-          <span className="text-[10px] font-bold uppercase text-zinc-400 tracking-widest font-mono">Total Transfers</span>
+          <span className="text-[10px] font-bold uppercase text-slate-400 tracking-widest font-mono">Total Transfers</span>
           <h2 className="text-3xl font-extrabold text-white mt-2 tracking-tight">
-            {requests.length} <span className="text-xs font-semibold text-zinc-400">Proposals</span>
+            {requests.length} <span className="text-xs font-semibold text-slate-400">Proposals</span>
           </h2>
-          <p className="text-[10px] text-zinc-400 mt-2">
-            Pending: <span className="text-yellow-400 font-bold">{requests.filter(r => r.status === 0).length}</span> | Executed: <span className="text-emerald-400 font-bold">{requests.filter(r => r.status === 1).length}</span>
+          <p className="text-[10px] text-slate-400 mt-2 font-medium">
+            Pending: <span className="text-amber-400 font-bold">{requests.filter(r => r.status === 0).length}</span> | Executed: <span className="text-cyan-400 font-bold">{requests.filter(r => r.status === 1).length}</span>
           </p>
         </div>
 
         {/* Stat 4: Contracts info */}
-        <div className="glass-panel rounded-2xl p-5 relative overflow-hidden flex flex-col justify-between">
-          <span className="text-[10px] font-bold uppercase text-zinc-400 tracking-widest font-mono">Contract Target</span>
+        <div className="glass-panel rounded-xl p-5 relative overflow-hidden flex flex-col justify-between">
+          <span className="text-[10px] font-bold uppercase text-slate-400 tracking-widest font-mono">Contract Target</span>
           <div className="mt-2.5">
-            <div className="flex items-center justify-between text-[11px] font-mono border-b border-zinc-900 pb-1.5">
-              <span className="text-zinc-400 font-semibold">Vault Core:</span>
-              <span className="text-violet-400" title={CONTRACTS.vaultId}>
+            <div className="flex items-center justify-between text-[11px] font-mono border-b border-slate-900/60 pb-1.5">
+              <span className="text-slate-400 font-medium">Vault Core:</span>
+              <span className="text-cyan-400 font-semibold hover:text-cyan-300 transition-colors" title={CONTRACTS.vaultId}>
                 {CONTRACTS.vaultId.substring(0, 8)}...
               </span>
             </div>
             <div className="flex items-center justify-between text-[11px] font-mono pt-1.5">
-              <span className="text-zinc-400 font-semibold">Registry:</span>
-              <span className="text-violet-400" title={CONTRACTS.registryId}>
+              <span className="text-slate-400 font-medium">Registry:</span>
+              <span className="text-blue-400 font-semibold hover:text-blue-300 transition-colors" title={CONTRACTS.registryId}>
                 {CONTRACTS.registryId.substring(0, 8)}...
               </span>
             </div>
           </div>
-          <div className="text-[9px] text-zinc-500 mt-2 text-right">
+          <div className="text-[9px] text-slate-500 mt-2 text-right font-medium">
             Deployed on Soroban
           </div>
         </div>
@@ -681,9 +679,9 @@ export default function Home() {
         <div className="lg:col-span-1 flex flex-col gap-8">
           
           {/* Form: Deposit */}
-          <div className="glass-panel rounded-2xl p-6 relative overflow-hidden">
-            <h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-              <svg className="w-5 h-5 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <div className="glass-panel rounded-xl p-5 relative overflow-hidden">
+            <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+              <svg className="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               Deposit Funds
@@ -691,7 +689,7 @@ export default function Home() {
             
             <form onSubmit={handleDeposit} className="flex flex-col gap-4">
               <div>
-                <label htmlFor="deposit-input" className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 mb-1.5 font-mono">Amount (USDC)</label>
+                <label htmlFor="deposit-input" className="block text-[9px] uppercase font-medium tracking-wider text-slate-400 mb-1.5 font-mono">Amount (USDC)</label>
                 <div className="relative">
                   <input
                     id="deposit-input"
@@ -700,9 +698,9 @@ export default function Home() {
                     onChange={(e) => setDepositAmount(e.target.value)}
                     placeholder="e.g. 500"
                     disabled={loadingAction === "deposit"}
-                    className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl py-3 px-4 text-sm font-semibold outline-none focus:border-violet-500 transition-colors"
+                    className="w-full bg-slate-950/60 border border-slate-800/80 text-white rounded-lg py-2.5 px-3.5 text-sm font-medium outline-none focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/25 transition-all placeholder-slate-600"
                   />
-                  <div className="absolute right-4 top-3 text-xs font-bold text-zinc-500 font-mono">
+                  <div className="absolute right-3.5 top-2.5 text-xs font-bold text-cyan-400 font-mono">
                     USDC
                   </div>
                 </div>
@@ -711,11 +709,11 @@ export default function Home() {
               <button
                 type="submit"
                 disabled={loadingAction === "deposit" || !depositAmount}
-                className="w-full h-11 bg-gradient-to-tr from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:from-zinc-900 disabled:to-zinc-900 disabled:text-zinc-600 text-xs font-semibold text-white rounded-xl transition-all shadow-md shadow-violet-500/5 flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full h-10 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-500 text-xs font-semibold text-white rounded-lg transition-all shadow-md shadow-blue-500/10 flex items-center justify-center gap-2 cursor-pointer border border-blue-400/10"
               >
                 {loadingAction === "deposit" ? (
                   <>
-                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
@@ -734,11 +732,11 @@ export default function Home() {
                     type="button"
                     onClick={handleEstablishTrustline}
                     disabled={loadingAction !== null}
-                    className="flex-1 py-2 border border-violet-850 hover:border-violet-750 bg-violet-950/20 hover:bg-violet-950/50 disabled:border-zinc-900 disabled:bg-transparent disabled:text-zinc-600 text-[10px] font-bold text-violet-300 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    className="flex-1 py-2 border border-blue-900/40 hover:border-blue-700/60 bg-blue-950/20 hover:bg-blue-950/50 disabled:border-slate-900 disabled:bg-transparent disabled:text-slate-600 text-[10px] font-semibold text-cyan-400 rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                   >
                     {loadingAction === "establish_trustline" ? (
                       <>
-                        <svg className="animate-spin h-3 w-3 text-violet-400" fill="none" viewBox="0 0 24 24">
+                        <svg className="animate-spin h-3 w-3 text-cyan-400" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
@@ -752,7 +750,7 @@ export default function Home() {
                     type="button"
                     onClick={handleRequestFaucet}
                     disabled={loadingAction !== null}
-                    className="flex-1 py-2 border border-zinc-800 hover:border-zinc-700 bg-zinc-900/30 hover:bg-zinc-900/70 disabled:border-zinc-900 disabled:bg-transparent disabled:text-zinc-650 text-[10px] font-bold text-zinc-300 rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                    className="flex-1 py-2 border border-slate-800 hover:border-slate-700 bg-slate-900/40 hover:bg-slate-900 disabled:border-slate-900 disabled:bg-transparent disabled:text-slate-650 text-[10px] font-semibold text-slate-300 rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                   >
                     {loadingAction === "request_faucet" ? (
                       <>
@@ -772,9 +770,9 @@ export default function Home() {
           </div>
 
           {/* Form: Submit Request */}
-          <div className="glass-panel rounded-2xl p-6 relative overflow-hidden">
-            <h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-              <svg className="w-5 h-5 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+          <div className="glass-panel rounded-xl p-5 relative overflow-hidden">
+            <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+              <svg className="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
               Create Spending Proposal
@@ -783,7 +781,7 @@ export default function Home() {
             <form onSubmit={handleSubmitRequest} className="flex flex-col gap-4">
               
               <div>
-                <label htmlFor="recipient-input" className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 mb-1.5 font-mono">Recipient Address</label>
+                <label htmlFor="recipient-input" className="block text-[9px] uppercase font-medium tracking-wider text-slate-400 mb-1.5 font-mono">Recipient Address</label>
                 <input
                   id="recipient-input"
                   type="text"
@@ -791,13 +789,13 @@ export default function Home() {
                   onChange={(e) => setNewRequest({ ...newRequest, recipient: e.target.value })}
                   placeholder="G..."
                   disabled={loadingAction === "submit_request"}
-                  className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl py-3 px-4 text-xs font-mono outline-none focus:border-violet-500 transition-colors"
+                  className="w-full bg-slate-950/60 border border-slate-800/80 text-white rounded-lg py-2.5 px-3.5 text-xs font-mono outline-none focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/25 transition-all placeholder-slate-600"
                 />
                 {networkMode === "simulation" && (
                   <button
                     type="button"
                     onClick={() => setNewRequest({ ...newRequest, recipient: SIM_ACCOUNTS.RECIPIENT })}
-                    className="text-[9px] text-violet-400 hover:text-violet-300 font-mono mt-1 underline"
+                    className="text-[9px] text-cyan-400 hover:text-cyan-300 font-mono mt-1 underline cursor-pointer"
                   >
                     Insert Mock Recipient Address
                   </button>
@@ -805,7 +803,7 @@ export default function Home() {
               </div>
 
               <div>
-                <label htmlFor="amount-input" className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 mb-1.5 font-mono">Amount (USDC)</label>
+                <label htmlFor="amount-input" className="block text-[9px] uppercase font-medium tracking-wider text-slate-400 mb-1.5 font-mono">Amount (USDC)</label>
                 <input
                   id="amount-input"
                   type="number"
@@ -813,12 +811,12 @@ export default function Home() {
                   onChange={(e) => setNewRequest({ ...newRequest, amount: e.target.value })}
                   placeholder="e.g. 1000"
                   disabled={loadingAction === "submit_request"}
-                  className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl py-3 px-4 text-sm font-semibold outline-none focus:border-violet-500 transition-colors"
+                  className="w-full bg-slate-950/60 border border-slate-800/80 text-white rounded-lg py-2.5 px-3.5 text-sm font-medium outline-none focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/25 transition-all placeholder-slate-600"
                 />
               </div>
 
               <div>
-                <label htmlFor="desc-input" className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 mb-1.5 font-mono">Proposal Description</label>
+                <label htmlFor="desc-input" className="block text-[9px] uppercase font-medium tracking-wider text-slate-400 mb-1.5 font-mono">Proposal Description</label>
                 <textarea
                   id="desc-input"
                   value={newRequest.description}
@@ -826,18 +824,18 @@ export default function Home() {
                   placeholder="Explain what these treasury funds will be used for..."
                   rows={3}
                   disabled={loadingAction === "submit_request"}
-                  className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl py-3 px-4 text-xs outline-none focus:border-violet-500 transition-colors resize-none"
+                  className="w-full bg-slate-950/60 border border-slate-800/80 text-white rounded-lg py-2.5 px-3.5 text-xs outline-none focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/25 transition-all placeholder-slate-600"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={loadingAction === "submit_request" || !newRequest.recipient || !newRequest.amount || !newRequest.description}
-                className="w-full h-11 bg-gradient-to-tr from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:from-zinc-900 disabled:to-zinc-900 disabled:text-zinc-600 text-xs font-semibold text-white rounded-xl transition-all shadow-md shadow-violet-500/5 flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full h-10 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-500 text-xs font-semibold text-white rounded-lg transition-all shadow-md shadow-blue-500/10 flex items-center justify-center gap-2 cursor-pointer border border-blue-400/10"
               >
                 {loadingAction === "submit_request" ? (
                   <>
-                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
@@ -854,29 +852,29 @@ export default function Home() {
 
         {/* Right Hand: Spending Requests List (Spans 2 columns) */}
         <div className="lg:col-span-2 flex flex-col gap-6">
-          <div className="glass-panel rounded-2xl p-6 flex-1 flex flex-col">
-            <div className="flex items-center justify-between border-b border-zinc-900 pb-4 mb-6">
+          <div className="glass-panel rounded-xl p-5 flex-1 flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-900 pb-4 mb-6">
               <div>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <svg className="w-5 h-5 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                  <svg className="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                   </svg>
                   Spending Requests Registry
                 </h3>
-                <p className="text-xs text-zinc-400 mt-0.5">Threshold-governed payments status</p>
+                <p className="text-xs text-slate-400 mt-0.5">Threshold-governed payments status</p>
               </div>
-              <span className="text-xs font-bold font-mono px-3 py-1 bg-zinc-950 border border-zinc-800 rounded-full text-zinc-400">
+              <span className="text-xs font-semibold font-mono px-2.5 py-1 bg-slate-950 border border-slate-800 rounded-lg text-slate-350">
                 {requests.length} Total
               </span>
             </div>
 
             {requests.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
-                <svg className="w-12 h-12 text-zinc-700 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                <svg className="w-12 h-12 text-slate-700 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0a2 2 0 01-2 2H6a2 2 0 01-2-2m16 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                 </svg>
-                <h4 className="text-sm font-semibold text-zinc-300">No requests found</h4>
-                <p className="text-xs text-zinc-500 mt-1 max-w-sm">Use the form on the left to submit a new spending proposal to the contract signers.</p>
+                <h4 className="text-sm font-semibold text-slate-300">No requests found</h4>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm">Use the form on the left to submit a new spending proposal to the contract signers.</p>
               </div>
             ) : (
               <div className="flex flex-col gap-4 max-h-[750px] overflow-y-auto pr-1">
@@ -887,45 +885,45 @@ export default function Home() {
                   return (
                     <div
                       key={req.id}
-                      className="p-5 rounded-2xl bg-zinc-950/40 border border-zinc-900 flex flex-col md:flex-row md:items-center justify-between gap-6 transition-all hover:bg-zinc-950/70 hover:border-zinc-800"
+                      className="p-4 rounded-xl bg-slate-950/40 border border-slate-900 flex flex-col md:flex-row md:items-center justify-between gap-6 transition-all hover:bg-slate-950/70 hover:border-slate-800/80"
                     >
                       {/* Left Block: Info */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-extrabold font-mono text-violet-400">#{req.id}</span>
-                          <span className="text-xs font-semibold text-zinc-300">{req.description}</span>
+                          <span className="text-xs font-bold font-mono text-cyan-400">#{req.id}</span>
+                          <span className="text-xs font-medium text-slate-200">{req.description}</span>
                           
-                          {/* Badge based on Status */}
+                          {/* Muted Badge based on Status */}
                           {req.status === 0 ? (
-                            <span className="text-[9px] uppercase px-2 py-0.5 rounded font-bold font-mono tracking-wider bg-amber-950 text-amber-400 border border-amber-800 flex items-center gap-1.5">
-                              <span className="w-1 h-1 rounded-full bg-amber-400 animate-ping"></span>
+                            <span className="text-[9px] uppercase px-2 py-0.5 rounded font-bold font-mono tracking-wider bg-amber-950/40 text-amber-400 border border-amber-900/50 flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
                               Pending
                             </span>
                           ) : req.status === 1 ? (
-                            <span className="text-[9px] uppercase px-2 py-0.5 rounded font-bold font-mono tracking-wider bg-emerald-950 text-emerald-400 border border-emerald-800">
+                            <span className="text-[9px] uppercase px-2 py-0.5 rounded font-bold font-mono tracking-wider bg-cyan-950/50 text-cyan-400 border border-cyan-800/50">
                               Executed
                             </span>
                           ) : (
-                            <span className="text-[9px] uppercase px-2 py-0.5 rounded font-bold font-mono tracking-wider bg-zinc-900 text-zinc-400 border border-zinc-800">
+                            <span className="text-[9px] uppercase px-2 py-0.5 rounded font-bold font-mono tracking-wider bg-slate-900/50 text-slate-450 border border-slate-800/50">
                               Cancelled
                             </span>
                           )}
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 mt-3 text-xs text-zinc-500">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 mt-3 text-xs text-slate-400">
                           <div>
-                            <span className="font-semibold text-zinc-400">Recipient:</span>{" "}
-                            <span className="font-mono text-zinc-300" title={req.recipient}>
+                            <span className="font-semibold text-slate-450">Recipient:</span>{" "}
+                            <span className="font-mono text-slate-200 text-[11px]" title={req.recipient}>
                               {getAccountLabel(req.recipient)}
                             </span>
                           </div>
                           <div>
-                            <span className="font-semibold text-zinc-400">Proposer:</span>{" "}
-                            <span className="font-mono text-zinc-300">
+                            <span className="font-semibold text-slate-450">Proposer:</span>{" "}
+                            <span className="font-mono text-slate-200 text-[11px]">
                               {getAccountLabel(req.proposer)}
                             </span>
                           </div>
-                          <div className="sm:col-span-2 text-[10px] text-zinc-500 font-mono mt-1">
+                          <div className="sm:col-span-2 text-[10px] text-slate-500 font-mono mt-1">
                             Proposed: {new Date(req.createdAt).toLocaleString()}
                           </div>
                         </div>
@@ -933,16 +931,16 @@ export default function Home() {
                         {/* Progress Bar (Visible if pending) */}
                         {req.status === 0 && (
                           <div className="mt-4">
-                            <div className="flex justify-between items-center text-[10px] text-zinc-400 font-semibold mb-1">
+                            <div className="flex justify-between items-center text-[10px] text-slate-400 font-semibold mb-1">
                               <span>Signatures / Approvals</span>
-                              <span className={meetsThreshold ? "text-emerald-400 font-bold" : "text-violet-400 font-bold"}>
+                              <span className={meetsThreshold ? "text-cyan-455 font-bold" : "text-blue-400 font-bold"}>
                                 {req.approvalsCount} of {config.threshold} Met
                               </span>
                             </div>
-                            <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden">
+                            <div className="h-1.5 w-full bg-slate-950 border border-slate-900 rounded-full overflow-hidden">
                               <div
                                 className={`h-full rounded-full transition-all duration-500 ${
-                                  meetsThreshold ? "bg-emerald-500" : "bg-violet-500"
+                                  meetsThreshold ? "bg-cyan-500" : "bg-blue-600"
                                 }`}
                                 style={{ width: `${Math.min(100, (req.approvalsCount / config.threshold) * 100)}%` }}
                               ></div>
@@ -953,9 +951,9 @@ export default function Home() {
 
                       {/* Right Block: Amount & Actions */}
                       <div className="flex flex-col items-start md:items-end justify-between self-stretch flex-shrink-0 gap-3">
-                        <div className="text-xl font-black text-white font-mono">
+                        <div className="text-lg font-bold text-white font-mono">
                           {parseFloat(req.amount).toLocaleString()}{" "}
-                          <span className="text-xs font-bold text-violet-400">USDC</span>
+                          <span className="text-xs font-bold text-cyan-400">USDC</span>
                         </div>
 
                         {/* Action buttons */}
@@ -965,10 +963,10 @@ export default function Home() {
                             <button
                               onClick={() => handleApproveRequest(req.id)}
                               disabled={loadingAction === `approve_${req.id}` || (networkMode === "simulation" && !!hasApprovedLocal)}
-                              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
+                              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
                                 networkMode === "simulation" && hasApprovedLocal
-                                  ? "bg-zinc-950 border-zinc-900 text-zinc-600 cursor-not-allowed"
-                                  : "bg-violet-950 border-violet-800 text-violet-300 hover:bg-violet-900 hover:text-white"
+                                  ? "bg-slate-950 border-slate-900 text-slate-650 cursor-not-allowed"
+                                  : "bg-slate-900 border-slate-800 text-slate-200 hover:bg-slate-850 hover:border-blue-900/40 hover:text-white cursor-pointer"
                               }`}
                             >
                               {loadingAction === `approve_${req.id}` ? "..." : hasApprovedLocal ? "Approved" : "Approve"}
@@ -978,10 +976,10 @@ export default function Home() {
                             <button
                               onClick={() => handleExecuteRequest(req.id)}
                               disabled={!meetsThreshold || loadingAction === `execute_${req.id}`}
-                              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
+                              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
                                 meetsThreshold
-                                  ? "bg-emerald-950 border-emerald-800 text-emerald-300 hover:bg-emerald-900 hover:text-white cursor-pointer"
-                                  : "bg-zinc-950 border-zinc-900 text-zinc-600 cursor-not-allowed"
+                                  ? "bg-cyan-500 hover:bg-cyan-400 text-slate-950 border border-cyan-400/20 shadow-md shadow-cyan-500/10 cursor-pointer"
+                                  : "bg-slate-950 border-slate-900 text-slate-650 cursor-not-allowed"
                               }`}
                             >
                               {loadingAction === `execute_${req.id}` ? "Executing..." : "Execute"}
@@ -992,7 +990,7 @@ export default function Home() {
                               <button
                                 onClick={() => handleCancelRequest(req.id)}
                                 disabled={loadingAction === `cancel_${req.id}`}
-                                className="px-2 py-1.5 text-xs font-semibold rounded-lg border border-zinc-900 hover:border-red-900/40 hover:bg-red-950/20 text-zinc-500 hover:text-red-400 transition-all cursor-pointer"
+                                className="px-2 py-1.5 text-xs font-medium rounded-lg border border-slate-850 hover:border-red-900/40 hover:bg-red-950/15 text-slate-500 hover:text-red-400 transition-colors cursor-pointer"
                               >
                                 {loadingAction === `cancel_${req.id}` ? "..." : "Cancel"}
                               </button>
@@ -1011,34 +1009,34 @@ export default function Home() {
       </div>
 
       {/* 5. Registry Vault Catalog & Event Log Ledger (Bottom) */}
-      <footer className="glass-panel rounded-2xl p-6 mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <footer className="glass-panel rounded-xl p-5 mt-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* Left Bottom: Registry Catalog */}
-        <div className="lg:col-span-1 border-r border-zinc-900 lg:pr-8">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400 font-mono mb-4 flex items-center gap-2">
-            <svg className="w-4 h-4 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+        <div className="lg:col-span-1 border-r border-slate-800/50 lg:pr-8">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono mb-4 flex items-center gap-2">
+            <svg className="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
             </svg>
             Registry Vault Catalog
           </h4>
           
           <div className="flex flex-col gap-3">
-            <div className="p-3 bg-zinc-950/60 border border-zinc-900 rounded-xl flex items-center justify-between">
+            <div className="p-3 bg-slate-950/40 border border-slate-900 rounded-lg flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold text-zinc-200">VaultLink Alpha (Primary)</p>
-                <p className="text-[10px] text-zinc-500 font-mono">{CONTRACTS.vaultId.substring(0, 16)}...</p>
+                <p className="text-xs font-semibold text-slate-200">VaultLink Alpha (Primary)</p>
+                <p className="text-[10px] text-slate-550 font-mono">{CONTRACTS.vaultId.substring(0, 16)}...</p>
               </div>
-              <span className="text-[9px] uppercase px-1.5 py-0.5 rounded font-bold font-mono bg-emerald-950/40 text-emerald-400 border border-emerald-900/60">
+              <span className="text-[9px] uppercase px-1.5 py-0.5 rounded font-bold font-mono bg-cyan-950/50 text-cyan-400 border border-cyan-800/40">
                 Registered
               </span>
             </div>
             
-            <div className="p-3 bg-zinc-950/20 border border-dashed border-zinc-900 rounded-xl flex items-center justify-between opacity-50">
+            <div className="p-3 bg-slate-950/10 border border-dashed border-slate-900 rounded-lg flex items-center justify-between opacity-50">
               <div>
-                <p className="text-xs font-semibold text-zinc-400">VaultLink Beta (Standby)</p>
-                <p className="text-[10px] text-zinc-600 font-mono">Not deployed...</p>
+                <p className="text-xs font-semibold text-slate-450">VaultLink Beta (Standby)</p>
+                <p className="text-[10px] text-slate-600 font-mono">Not deployed...</p>
               </div>
-              <span className="text-[9px] uppercase px-1.5 py-0.5 rounded font-bold font-mono bg-zinc-900 text-zinc-600 border border-zinc-800">
+              <span className="text-[9px] uppercase px-1.5 py-0.5 rounded font-bold font-mono bg-slate-900/60 text-slate-500 border border-slate-850/60">
                 Offline
               </span>
             </div>
@@ -1047,45 +1045,45 @@ export default function Home() {
 
         {/* Right Bottom: Activity Ledger */}
         <div className="lg:col-span-2">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400 font-mono mb-4 flex items-center justify-between">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono mb-4 flex items-center justify-between">
             <span className="flex items-center gap-2">
-              <svg className="w-4 h-4 text-violet-500 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+              <svg className="w-4 h-4 text-cyan-400 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               Soroban Registry Event Ledger
             </span>
-            <span className="text-[9px] uppercase bg-violet-950 px-2 py-0.5 rounded text-violet-400 font-mono border border-violet-850">
+            <span className="text-[9px] uppercase bg-cyan-950/40 px-2 py-0.5 rounded text-cyan-400 border border-cyan-800/35 font-mono">
               Live Feed
             </span>
           </h4>
 
           <div className="flex flex-col gap-2.5 max-h-[160px] overflow-y-auto pr-1">
             {activities.map((act) => (
-              <div key={act.id} className="text-xs flex items-start gap-3 py-1.5 border-b border-zinc-900/60 last:border-0">
-                <span className="text-zinc-600 font-mono text-[10px] flex-shrink-0 pt-0.5">
+              <div key={act.id} className="text-xs flex items-start gap-3 py-1.5 border-b border-slate-900/50 last:border-0">
+                <span className="text-slate-500 font-mono text-[10px] flex-shrink-0 pt-0.5">
                   {new Date(act.timestamp).toLocaleTimeString()}
                 </span>
                 
                 {/* Event Type Icon Indicator */}
                 <div className="flex-shrink-0 mt-0.5">
                   {act.type === "deposit" ? (
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" title="Deposit"></span>
+                    <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block" title="Deposit"></span>
                   ) : act.type === "submit_request" ? (
-                    <span className="w-2 h-2 rounded-full bg-violet-500 inline-block" title="Proposal"></span>
+                    <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" title="Proposal"></span>
                   ) : act.type === "approve_request" ? (
-                    <span className="w-2 h-2 rounded-full bg-indigo-500 inline-block" title="Approval"></span>
+                    <span className="w-2 h-2 rounded-full bg-blue-400 inline-block" title="Approval"></span>
                   ) : act.type === "execute_request" ? (
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" title="Execution"></span>
+                    <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block" title="Execution"></span>
                   ) : act.type === "cancel_request" ? (
-                    <span className="w-2 h-2 rounded-full bg-zinc-500 inline-block" title="Cancellation"></span>
+                    <span className="w-2 h-2 rounded-full bg-slate-650 inline-block" title="Cancellation"></span>
                   ) : (
-                    <span className="w-2 h-2 rounded-full bg-violet-400 inline-block" title="Register"></span>
+                    <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block" title="Register"></span>
                   )}
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <span className="text-zinc-300 font-medium">{act.details}</span>{" "}
-                  <span className="text-zinc-500 text-[10px] font-mono">
+                  <span className="text-slate-200 font-medium">{act.details}</span>{" "}
+                  <span className="text-slate-500 text-[10px] font-mono">
                     by {getAccountLabel(act.user)}
                   </span>
                 </div>

@@ -1,9 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #08070d;
-  --foreground: #f3f4f6;
-  --primary-glow: radial-gradient(rgba(139, 92, 246, 0.15), rgba(99, 102, 241, 0.05));
+  --background: #070a13; /* Midnight Navy */
+  --foreground: #f8fafc; /* Slate-50 */
 }
 
 @theme inline {
@@ -22,7 +21,7 @@ body {
   overflow-x: hidden;
 }
 
-/* Premium radial backdrop glow */
+/* Premium top radial backdrop glow (Uniswap / Safe style) */
 body::before {
   content: "";
   position: absolute;
@@ -30,62 +29,53 @@ body::before {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: var(--primary-glow);
+  background: radial-gradient(circle at 50% -20%, rgba(37, 99, 235, 0.12), rgba(6, 182, 212, 0.04) 45%, rgba(7, 10, 19, 0) 80%);
   pointer-events: none;
   z-index: -1;
 }
 
-/* Glassmorphism utility card border glow */
+/* Layered glass panel style */
 .glass-panel {
-  background: rgba(17, 16, 28, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  background: rgba(13, 20, 38, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(148, 163, 184, 0.08);
+  box-shadow: 0 10px 30px -10px rgba(2, 4, 8, 0.5);
 }
 
 .glass-panel-hover {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .glass-panel-hover:hover {
-  background: rgba(22, 20, 38, 0.85);
-  border-color: rgba(139, 92, 246, 0.25);
-  box-shadow: 0 12px 40px 0 rgba(139, 92, 246, 0.15);
-  transform: translateY(-2px);
+  background: rgba(18, 28, 54, 0.85);
+  border-color: rgba(6, 182, 212, 0.3); /* Neon Cyan Highlight */
+  box-shadow: 0 15px 35px -5px rgba(2, 4, 8, 0.7), 0 0 15px 0 rgba(6, 182, 212, 0.02);
 }
 
-/* Custom glowing badge animations */
-@keyframes pulse-glow {
-  0%, 100% {
-    opacity: 0.6;
-    box-shadow: 0 0 12px rgba(139, 92, 246, 0.2);
-  }
-  50% {
-    opacity: 1;
-    box-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
-  }
-}
-
+/* Clean utility branding badge */
 .pulse-glow-violet {
-  animation: pulse-glow 3s infinite;
+  animation: none;
+  background: rgba(6, 182, 212, 0.08);
+  color: #22d3ee; /* Cyan-400 */
+  border-color: rgba(6, 182, 212, 0.25);
 }
 
 /* Smooth custom scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(8, 7, 13, 0.5);
+  background: #070a13;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(139, 92, 246, 0.3);
-  border-radius: 4px;
+  background: rgba(30, 41, 59, 0.8);
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(139, 92, 246, 0.5);
+  background: rgba(51, 65, 85, 0.9);
 }
