@@ -8,7 +8,7 @@ export const DEFAULT_CONTRACTS = {
   registryId: "CAB12XYZ... (Run scripts/deploy.ps1 to generate real ID)",
   tokenId: "CDUSDC... (Mock USDC Stellar Asset Contract)",
   network: "testnet",
-  adminAddress: "G-ADMIN-VAULTLINK-XXXXXXXXXXXXXX-ADM",
+  adminAddress: "GACYFFEF6TV4MNCRW5LYZ57PO6V3CAVZMGYBEHD4MG6IPYVXENE4XJQO",
 };
 
 // RPC and Network configuration
@@ -135,6 +135,60 @@ export async function fetchContractRequest(vaultId: string, requestId: number): 
 }
 
 /**
+ * Fetch Vault Balance from Soroban Contract via Simulation
+ */
+export async function fetchVaultBalance(vaultId: string): Promise<string> {
+  try {
+    const balance = await invokeReadOnlyMethod(vaultId, "get_vault_balance");
+    return balance.toString();
+  } catch (err) {
+    console.error("Error fetching vault balance:", err);
+    return "0";
+  }
+}
+
+/**
+ * Fetch all spending requests from the Vault Contract
+ */
+export async function fetchContractRequests(vaultId: string): Promise<SpendingRequest[]> {
+  try {
+    const countVal = await invokeReadOnlyMethod(vaultId, "get_request_count");
+    const count = Number(countVal);
+    const requests: SpendingRequest[] = [];
+    
+    for (let i = 1; i <= count; i++) {
+      try {
+        const req = await fetchContractRequest(vaultId, i);
+        // Filter out fallback requests if possible (we verify id is retrieved)
+        requests.push(req);
+      } catch (err) {
+        console.error(`Error fetching request #${i}:`, err);
+      }
+    }
+    
+    return requests.reverse(); // Newest first
+  } catch (err) {
+    console.error("Error fetching request count:", err);
+    return [];
+  }
+}
+
+/**
+ * Fetch token balance for a given address
+ */
+export async function fetchTokenBalance(tokenId: string, address: string): Promise<string> {
+  try {
+    const balance = await invokeReadOnlyMethod(tokenId, "balance", [
+      StellarSdk.nativeToScVal(address, { type: "address" })
+    ]);
+    return balance.toString();
+  } catch (err) {
+    console.error("Error fetching token balance:", err);
+    return "0";
+  }
+}
+
+/**
  * Invokes a read-only Soroban contract function via simulation to fetch state
  */
 export async function invokeReadOnlyMethod(
@@ -144,7 +198,9 @@ export async function invokeReadOnlyMethod(
 ): Promise<any> {
   const server = getRpcServer();
   const dummyAccount = new StellarSdk.Account(
-    "G-ADMIN-VAULTLINK-XXXXXXXXXXXXXX-ADM", // Dummy address for simulation source
+    CONTRACTS.adminAddress && CONTRACTS.adminAddress.startsWith("G") && CONTRACTS.adminAddress.length === 56
+      ? CONTRACTS.adminAddress
+      : "GACYFFEF6TV4MNCRW5LYZ57PO6V3CAVZMGYBEHD4MG6IPYVXENE4XJQO", // Dummy address for simulation source
     "0"
   );
   

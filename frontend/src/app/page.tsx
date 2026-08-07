@@ -28,7 +28,11 @@ import {
   approveRequestInVault,
   executeRequestInVault,
   cancelRequestInVault,
-  establishTrustline
+  establishTrustline,
+  fetchVaultBalance,
+  fetchContractRequests,
+  fetchTokenBalance,
+  fetchContractConfig
 } from "./stellar";
 
 export default function Home() {
@@ -77,7 +81,7 @@ export default function Home() {
   }, []);
 
   // Fetch / Sync State based on Network Mode
-  const syncState = () => {
+  const syncState = async () => {
     if (networkMode === "simulation") {
       const state: SimState = getSimulationState();
       setConfig(state.config);
@@ -86,35 +90,34 @@ export default function Home() {
       setVaultBalance(state.balance);
       setUserBalances(state.userBalances);
     } else {
-      // Testnet Mode: load configs and set initial placeholders since live calls require RPC
-      setConfig({
-        admin: CONTRACTS.adminAddress || "G-TESTNET-ADMIN-XXXXXX",
-        token: CONTRACTS.tokenId,
-        registry: CONTRACTS.registryId,
-        threshold: 2
-      });
-      setVaultBalance("15000"); // Mock testnet pool size
-      setRequests([
-        {
-          id: 101,
-          recipient: "G-MERCHANT-RECIPIENT-XXXXX",
-          amount: "5000",
-          description: "Stellar network operational budget",
-          approvalsCount: 1,
-          status: 0,
-          createdAt: Date.now() - 3600000 * 5,
-          proposer: wallet.address || "G-PROPOSER-MEMBER-XXXXX"
+      // Testnet Mode: load configs from contract
+      try {
+        const liveConfig = await fetchContractConfig(CONTRACTS.vaultId);
+        setConfig(liveConfig);
+        
+        const balance = await fetchVaultBalance(CONTRACTS.vaultId);
+        setVaultBalance(balance);
+        
+        const liveRequests = await fetchContractRequests(CONTRACTS.vaultId);
+        setRequests(liveRequests);
+        
+        if (wallet.address) {
+          const tokenBal = await fetchTokenBalance(CONTRACTS.tokenId, wallet.address);
+          setWallet(w => ({ ...w, balance: tokenBal }));
         }
-      ]);
-      setActivities([
-        {
-          id: "t1",
-          timestamp: Date.now() - 3600000 * 6,
-          type: "vault_registered",
-          user: CONTRACTS.vaultId,
-          details: "Deployed and registered contract on Stellar Testnet"
-        }
-      ]);
+        
+        setActivities([
+          {
+            id: "t1",
+            timestamp: Date.now() - 3600000 * 6,
+            type: "vault_registered",
+            user: CONTRACTS.vaultId,
+            details: "Deployed and registered contract on Stellar Testnet"
+          }
+        ]);
+      } catch (err) {
+        console.error("Error syncing testnet state:", err);
+      }
     }
   };
 
@@ -156,9 +159,15 @@ export default function Home() {
     setLoadingAction("connect_wallet");
     try {
       const pubKey = await connectWallet();
+      let liveBalance = "0";
+      try {
+        liveBalance = await fetchTokenBalance(CONTRACTS.tokenId, pubKey);
+      } catch (e) {
+        console.error("Failed to fetch token balance on connection:", e);
+      }
       setWallet({
         address: pubKey,
-        balance: "450", // Mock testnet token balance for user
+        balance: liveBalance,
         isConnected: true,
         error: null
       });
@@ -218,6 +227,7 @@ export default function Home() {
         throw new Error(data.error);
       }
       triggerNotification("success", `Faucet success: ${data.message}`);
+      syncState();
     } catch (err: any) {
       triggerNotification("error", err.message || String(err));
     } finally {
