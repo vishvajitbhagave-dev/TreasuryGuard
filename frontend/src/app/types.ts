@@ -29,6 +29,7 @@ export type NetworkMode = "simulation" | "testnet";
 export interface WalletState {
   address: string | null;
   balance: string;
+  xlmBalance?: string;
   isConnected: boolean;
   error: string | null;
 }

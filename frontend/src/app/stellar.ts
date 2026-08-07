@@ -423,3 +423,91 @@ export async function establishTrustline(userPublicKey: string): Promise<string>
   
   return txHash;
 }
+
+/**
+ * Fetch native XLM balance of a Stellar account
+ */
+export async function fetchXlmBalance(address: string): Promise<string> {
+  try {
+    const response = await fetch(`https://horizon-testnet.stellar.org/accounts/${address}`);
+    if (!response.ok) return "0";
+    const data = await response.json();
+    const nativeBalance = data.balances.find((b: any) => b.asset_type === "native");
+    return nativeBalance ? nativeBalance.balance : "0";
+  } catch (err) {
+    console.error("Error fetching XLM balance:", err);
+    return "0";
+  }
+}
+
+/**
+ * Sends a native XLM payment transaction on the Stellar Testnet signed with Freighter
+ */
+export async function sendXlmTransaction(
+  fromAddress: string,
+  toAddress: string,
+  amount: string
+): Promise<string> {
+  const server = getRpcServer();
+  const account = await server.getAccount(fromAddress);
+  
+  // Build native payment operation
+  const tx = new StellarSdk.TransactionBuilder(account, {
+    fee: "100",
+    networkPassphrase: TESTNET_PASSPHRASE,
+  })
+    .addOperation(
+      StellarSdk.Operation.payment({
+        destination: toAddress,
+        asset: StellarSdk.Asset.native(),
+        amount: amount,
+      })
+    )
+    .setTimeout(120)
+    .build();
+
+  const unsignedXdr = tx.toXDR();
+  const signResult = await signTransaction(unsignedXdr, { 
+    networkPassphrase: TESTNET_PASSPHRASE, 
+    address: fromAddress 
+  });
+  
+  if (signResult.error) {
+    throw new Error(`Freighter signing failed: ${signResult.error}`);
+  }
+  if (!signResult.signedTxXdr) {
+    throw new Error("Freighter did not return a signed transaction XDR.");
+  }
+  
+  const signedTx = StellarSdk.TransactionBuilder.fromXDR(signResult.signedTxXdr, TESTNET_PASSPHRASE);
+  const submitResult = await server.sendTransaction(signedTx);
+  
+  if (submitResult.status === "ERROR") {
+    throw new Error(`Transaction submission error: ${submitResult.errorResult || "Unknown error"}`);
+  }
+  
+  const txHash = submitResult.hash;
+  console.log("XLM payment transaction submitted. Hash:", txHash);
+  
+  let status = "PENDING";
+  let retryCount = 0;
+  while (status === "PENDING" || status === "NOT_FOUND") {
+    if (retryCount > 25) {
+      throw new Error(`Transaction polling timed out. Hash: ${txHash}`);
+    }
+    const result = await server.getTransaction(txHash);
+    status = result.status;
+    
+    if (status === "SUCCESS") {
+      return txHash;
+    } else if (status === "FAILED") {
+      throw new Error("XLM transaction failed on-chain.");
+    }
+    
+    retryCount++;
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  
+  return txHash;
+}
+
