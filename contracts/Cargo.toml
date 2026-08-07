@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = [
+    "vault",
+    "registry",
+]
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = false
+debug-assertions = false
+overflow-checks-std = true
+panic = "abort"
+lto = true
+codegen-units = 1

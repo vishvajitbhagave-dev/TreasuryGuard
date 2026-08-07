@@ -1,0 +1,27 @@
+# Dependency and Build directories for Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+
+# Rust/Cargo build outputs
+contracts/target/
+contracts/target_test/
+cargo_test_build/
+
+# IDE files and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local environment configuration
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
