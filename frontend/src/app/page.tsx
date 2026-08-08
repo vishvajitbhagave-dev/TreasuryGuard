@@ -401,6 +401,19 @@ export default function Home() {
       return;
     }
 
+    // Validation 3: Insufficient Vault Balance
+    const availableVaultBal = parseFloat(vaultBalance);
+    if (isNaN(availableVaultBal)) {
+      triggerNotification("error", "Error: Vault balance could not be verified. Please try again later.");
+      return;
+    }
+    const amountScaled = Math.round(amountVal * 10000000);
+    const vaultScaled = Math.round(availableVaultBal * 10000000);
+    if (amountScaled > vaultScaled) {
+      triggerNotification("error", `Insufficient vault balance. Available: ${availableVaultBal} USDC.`);
+      return;
+    }
+
     setLoadingAction("submit_request");
 
     try {
