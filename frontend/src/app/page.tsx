@@ -34,8 +34,13 @@ import {
   fetchTokenBalance,
   fetchContractConfig,
   fetchXlmBalance,
-  sendXlmTransaction
+  sendXlmTransaction,
+  fetchContractEvents
 } from "./stellar";
+
+const isValidStellarAddress = (addr: string) => {
+  return /^[G][A-D][A-Z2-7]{54}$/.test(addr);
+};
 
 export default function Home() {
   // Network Mode
@@ -113,15 +118,24 @@ export default function Home() {
           setWallet(w => ({ ...w, balance: tokenBal, xlmBalance: xlmBal }));
         }
         
-        setActivities([
-          {
-            id: "t1",
-            timestamp: Date.now() - 3600000 * 6,
-            type: "vault_registered",
-            user: CONTRACTS.vaultId,
-            details: "Deployed and registered contract on Stellar Testnet"
+        try {
+          const liveEvents = await fetchContractEvents(CONTRACTS.vaultId);
+          if (liveEvents && liveEvents.length > 0) {
+            setActivities(liveEvents);
+          } else {
+            setActivities([
+              {
+                id: "t1",
+                timestamp: Date.now() - 3600000 * 6,
+                type: "vault_registered",
+                user: CONTRACTS.vaultId,
+                details: "Deployed and registered contract on Stellar Testnet"
+              }
+            ]);
           }
-        ]);
+        } catch (eventErr) {
+          console.error("Failed to sync live events:", eventErr);
+        }
       } catch (err) {
         console.error("Error syncing testnet state:", err);
       }
@@ -130,6 +144,15 @@ export default function Home() {
 
   useEffect(() => {
     syncState();
+  }, [networkMode, wallet.address]);
+
+  // Poll live testnet data every 10 seconds for real-time event integration (Level 2)
+  useEffect(() => {
+    if (networkMode === "simulation") return;
+    const interval = setInterval(() => {
+      syncState();
+    }, 10000);
+    return () => clearInterval(interval);
   }, [networkMode, wallet.address]);
 
   // Flash Notification helper
@@ -256,6 +279,29 @@ export default function Home() {
   const handleSendXlm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!amountXlm || !recipientXlm) return;
+
+    // Validation 1: Invalid Public Key Format
+    if (!isValidStellarAddress(recipientXlm)) {
+      triggerNotification("error", "Invalid Address Format: Recipient address must be a valid 56-character Stellar public key starting with G.");
+      return;
+    }
+
+    // Validation 2: Invalid Amount
+    const xlmVal = parseFloat(amountXlm);
+    if (isNaN(xlmVal) || xlmVal <= 0) {
+      triggerNotification("error", "Invalid Amount: XLM payment amount must be greater than zero.");
+      return;
+    }
+
+    // Validation 3: Insufficient Balance
+    if (networkMode === "testnet") {
+      const userBal = parseFloat(wallet.xlmBalance || "0");
+      if (userBal < xlmVal) {
+        triggerNotification("error", `Insufficient Balance: Your wallet has ${userBal} XLM, which is less than the requested transfer amount of ${xlmVal} XLM.`);
+        return;
+      }
+    }
+
     setLoadingAction("send_xlm");
     try {
       if (networkMode === "simulation") {
@@ -284,9 +330,32 @@ export default function Home() {
   // Deposit Actions
   const handleDeposit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!depositAmount || parseFloat(depositAmount) <= 0) {
-      triggerNotification("error", "Please enter a valid deposit amount.");
+    if (!depositAmount) return;
+
+    // Validation 1: Invalid Amount
+    const depositVal = parseFloat(depositAmount);
+    if (isNaN(depositVal) || depositVal <= 0) {
+      triggerNotification("error", "Invalid Amount: Deposit amount must be greater than zero.");
       return;
+    }
+
+    // Validation 2: Insufficient Balance
+    if (networkMode === "simulation") {
+      const userBal = parseFloat(getSimulatedUserBalance());
+      if (userBal < depositVal) {
+        triggerNotification("error", `Insufficient Balance: Simulated wallet has ${userBal} USDC, which is less than the deposit of ${depositVal} USDC.`);
+        return;
+      }
+    } else {
+      if (!wallet.address) {
+        triggerNotification("error", "Please connect Freighter wallet first.");
+        return;
+      }
+      const userBal = parseFloat(wallet.balance || "0");
+      if (userBal < depositVal) {
+        triggerNotification("error", `Insufficient Balance: Your wallet has ${userBal} USDC, which is less than the requested deposit of ${depositVal} USDC.`);
+        return;
+      }
     }
 
     const amount = depositAmount;
@@ -294,23 +363,12 @@ export default function Home() {
 
     try {
       if (networkMode === "simulation") {
-        const userBal = parseFloat(getSimulatedUserBalance());
-        if (userBal < parseFloat(amount)) {
-          triggerNotification("error", "Insufficient funds in simulated wallet.");
-          setLoadingAction(null);
-          return;
-        }
-        simulatedDeposit(activeSimUser, parseFloat(amount));
+        simulatedDeposit(activeSimUser, depositVal);
         syncState();
         setDepositAmount("");
         triggerNotification("success", `Deposited ${amount} USDC into the vault!`);
       } else {
-        if (!wallet.address) {
-          triggerNotification("error", "Please connect Freighter wallet first.");
-          setLoadingAction(null);
-          return;
-        }
-        const txHash = await depositToVault(CONTRACTS.vaultId, amount, wallet.address);
+        const txHash = await depositToVault(CONTRACTS.vaultId, amount, wallet.address!);
         triggerNotification("success", `Deposit successful! Tx Hash: ${txHash.substring(0, 12)}...`);
         setDepositAmount("");
         syncState();
@@ -329,9 +387,17 @@ export default function Home() {
       triggerNotification("error", "All fields are required to submit a spending request.");
       return;
     }
+
+    // Validation 1: Invalid Public Key Format
+    if (!isValidStellarAddress(newRequest.recipient)) {
+      triggerNotification("error", "Invalid Address Format: Recipient address must be a valid 56-character Stellar public key starting with G.");
+      return;
+    }
+
+    // Validation 2: Invalid Amount
     const amountVal = parseFloat(newRequest.amount);
-    if (amountVal <= 0) {
-      triggerNotification("error", "Amount must be positive.");
+    if (isNaN(amountVal) || amountVal <= 0) {
+      triggerNotification("error", "Invalid Amount: Proposal request amount must be greater than zero.");
       return;
     }
 

@@ -511,3 +511,76 @@ export async function sendXlmTransaction(
   return txHash;
 }
 
+/**
+ * Fetch event logs from Soroban RPC for a contract
+ */
+export async function fetchContractEvents(contractId: string): Promise<any[]> {
+  const server = getRpcServer();
+  try {
+    const latestLedgerRes = await server.getLatestLedger();
+    const latestLedger = latestLedgerRes.sequence;
+    const startLedger = Math.max(1, latestLedger - 1000); // last ~1000 ledgers (approx 1.5 hours)
+    
+    const eventsRes = await server.getEvents({
+      startLedger: startLedger,
+      filters: [
+        {
+          type: "contract",
+          contractIds: [contractId],
+        }
+      ],
+      limit: 15,
+    });
+    
+    if (!eventsRes || !eventsRes.events) return [];
+    
+    return eventsRes.events.map((evt) => {
+      let type = "event";
+      let details = "Contract event";
+      let user = contractId;
+      
+      try {
+        const topics = evt.topic.map((t) => StellarSdk.scValToNative(t));
+        const value = StellarSdk.scValToNative(evt.value);
+        
+        const eventName = topics[0]?.toString();
+        if (eventName === "deposit") {
+          type = "deposit";
+          user = topics[1]?.toString() || user;
+          details = `Deposited ${parseFloat(value.toString()).toLocaleString()} USDC into vault`;
+        } else if (eventName === "request_submitted") {
+          type = "submit_request";
+          user = topics[1]?.toString() || user;
+          details = `Created Spending Proposal #${value.toString()}`;
+        } else if (eventName === "request_approved") {
+          type = "approve_request";
+          user = topics[1]?.toString() || user;
+          details = `Approved Proposal #${value.toString()}`;
+        } else if (eventName === "request_executed") {
+          type = "execute_request";
+          user = topics[1]?.toString() || user;
+          details = `Executed Proposal #${value.toString()}`;
+        } else if (eventName === "request_cancelled") {
+          type = "cancel_request";
+          user = topics[1]?.toString() || user;
+          details = `Cancelled Proposal #${value.toString()}`;
+        }
+      } catch (err) {
+        console.warn("Failed to parse event topics:", err);
+      }
+      
+      return {
+        id: evt.id,
+        timestamp: Date.now(),
+        type: type,
+        user: user,
+        details: details,
+      };
+    });
+  } catch (err) {
+    console.error("Failed to fetch contract events:", err);
+    return [];
+  }
+}
+
+
