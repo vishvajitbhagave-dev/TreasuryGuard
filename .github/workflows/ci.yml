@@ -1,0 +1,61 @@
+name: VaultLink CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-contracts:
+    name: Test Smart Contracts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "contracts -> target"
+
+      - name: Run Cargo Tests
+        run: cargo test --manifest-path contracts/Cargo.toml --all-features
+
+  test-build-frontend:
+    name: Test and Build Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Run Linting
+        run: npm run lint
+        working-directory: frontend
+
+      - name: Run Vitest Tests
+        run: npm run test
+        working-directory: frontend
+
+      - name: Build Next.js Web App
+        run: npm run build
+        working-directory: frontend
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
