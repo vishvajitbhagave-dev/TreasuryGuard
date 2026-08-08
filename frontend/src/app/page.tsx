@@ -155,6 +155,73 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [networkMode, wallet.address]);
 
+  // Background Simulator Engine for Simulation Mode (Level 3 Event Streaming & Real-Time simulation)
+  useEffect(() => {
+    if (networkMode !== "simulation") return;
+
+    const interval = setInterval(() => {
+      const state = getSimulationState();
+      
+      // Pick random event type: 0 = Deposit, 1 = Submit Proposal, 2 = Approve Proposal
+      const eventType = Math.floor(Math.random() * 3);
+      
+      // Determine background users (exclude the active interactive user to mock other actors)
+      const possibleUsers = [SIM_ACCOUNTS.ALICE, SIM_ACCOUNTS.BOB, SIM_ACCOUNTS.CHARLIE].filter(
+        (u) => u !== activeSimUser
+      );
+      if (possibleUsers.length === 0) return;
+      const randomUser = possibleUsers[Math.floor(Math.random() * possibleUsers.length)];
+
+      if (eventType === 0) {
+        // 1. Random deposit
+        const amounts = [100, 250, 500, 1000];
+        const amt = amounts[Math.floor(Math.random() * amounts.length)];
+        const userBal = parseFloat(state.userBalances[randomUser] || "0");
+        if (userBal >= amt) {
+          simulatedDeposit(randomUser, amt);
+          syncState();
+          triggerNotification("info", `Real-time activity: ${getAccountLabel(randomUser)} deposited ${amt} USDC into the vault.`);
+        }
+      } else if (eventType === 1) {
+        // 2. Random proposal submission
+        const descs = [
+          "Developer stipend for backend fixes",
+          "Marketing audit and SEO tools subscription",
+          "Stellar Horizon node hosting coverage",
+          "SaaS integrations monthly payment",
+          "Security auditing services deposit"
+        ];
+        const desc = descs[Math.floor(Math.random() * descs.length)];
+        const amt = Math.floor(Math.random() * 8 + 1) * 200; // 200 to 1600
+        
+        simulatedSubmitRequest(randomUser, SIM_ACCOUNTS.RECIPIENT, amt, desc);
+        syncState();
+        triggerNotification("info", `Real-time activity: ${getAccountLabel(randomUser)} submitted a new Spending Proposal for ${amt} USDC.`);
+      } else if (eventType === 2) {
+        // 3. Random approval on a pending proposal
+        const pendingReqs = state.requests.filter((r) => r.status === 0);
+        if (pendingReqs.length > 0) {
+          const randomReq = pendingReqs[Math.floor(Math.random() * pendingReqs.length)];
+          
+          // Find if there is a background user who hasn't approved yet
+          const potentialApprovers = possibleUsers.filter((u) => {
+            const sessionKey = `approved_${randomReq.id}_${u}`;
+            return !localStorage.getItem(sessionKey);
+          });
+          
+          if (potentialApprovers.length > 0) {
+            const approver = potentialApprovers[Math.floor(Math.random() * potentialApprovers.length)];
+            simulatedApproveRequest(approver, randomReq.id);
+            syncState();
+            triggerNotification("info", `Real-time activity: ${getAccountLabel(approver)} approved Spending Proposal #${randomReq.id}.`);
+          }
+        }
+      }
+    }, 20000); // Trigger every 20 seconds to keep the simulation alive and realistic
+
+    return () => clearInterval(interval);
+  }, [networkMode, activeSimUser]);
+
   // Flash Notification helper
   const triggerNotification = (type: "success" | "error" | "info", message: string) => {
     setNotification({ type, message });
