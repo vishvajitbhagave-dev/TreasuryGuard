@@ -4,6 +4,20 @@ VaultLink is a premium, secure, and production-ready **multi-signature treasury 
 
 This repository is fully compliant with **Level 3 Smart Contract & Web Application Developer specifications**, featuring advanced on-chain programming, inter-contract messages, real-time sync engines, comprehensive test suites, Docker hosting setups, and automated CI/CD pipelines.
 
+### 🌐 Live Demo
+
+<!-- TODO: Deploy to Vercel and paste the URL here.
+     Fastest way to deploy:
+       1. Push this repo to GitHub (already done)
+       2. Go to https://vercel.com/new
+       3. Import the GitHub repo "vishvajitbhagave-dev/TreasuryGuard"
+       4. Set "Root Directory" to "frontend"
+       5. Framework Preset: Next.js (auto-detected)
+       6. Click Deploy — done in ~60 seconds
+       7. Copy the production URL (e.g. https://treasury-guard.vercel.app) below
+-->
+🔗 **Live App:** _Not deployed yet — [deploy on Vercel](https://vercel.com/new)_
+
 ---
 
 ## 🏗️ Architecture Design & Flows
@@ -78,6 +92,112 @@ sequenceDiagram
 
 ---
 
+## 🔗 Deployed Contracts (Stellar Testnet)
+
+All contracts are deployed on **Stellar Testnet**. Addresses are auto-loaded from `frontend/src/config/contracts.json`.
+
+| Contract | Address |
+| :--- | :--- |
+| **Vault Core** | `CAE76V4RTBOADDXZGQZOOHIJZKTLWEI6MSUL5DM3UHVJ5MHALVON6MGW` |
+| **Vault Registry** | `CBQKUWSNFURGUV5LYPMMOK3YOWWPUUI2N6LSXIKQS3H745I2R7W5CMQU` |
+| **SAC Token (USDC)** | `CDT3PKODYDZDCDXJLO3PZ56GARG5SIDCDEEDTU7EBGPW3EITKCOWQOXW` |
+
+> **Admin/Owner address:** `GACYFFEF6TV4MNCRW5LYZ57PO6V3CAVZMGYBEHD4MG6IPYVXENE4XJQO`
+
+---
+
+## 📸 Screenshots
+
+### Wallet Selector (Multi-Wallet Support)
+
+<!-- TODO: Capture screenshot of wallet dropdown.
+     Steps:
+       1. npm run dev → open http://localhost:3000
+       2. Switch to "Stellar Testnet" mode in the header toggle
+       3. Click "Connect Wallet" button
+       4. Screenshot the dropdown showing Freighter / LOBSTR / Rabet
+       5. Save as public/wallet-selector.png and uncomment the line below
+-->
+<!-- ![Wallet Selector](public/wallet-selector.png) -->
+
+### Mobile Responsive UI
+
+<!-- TODO: Capture screenshot of mobile layout.
+     Steps:
+       1. Open the app in Chrome
+       2. Press F12 → open DevTools
+       3. Click the device toggle icon (top-left of DevTools, looks like a phone/tablet)
+       4. Select "iPhone 14 Pro" (393×852) or "Pixel 7" (412×915) from the device dropdown
+       5. Refresh the page — the layout should stack vertically
+       6. Screenshot the full page showing stacked cards and mobile-friendly navigation
+       7. Save as public/mobile-responsive.png and uncomment the line below
+-->
+<!-- ![Mobile Responsive](public/mobile-responsive.png) -->
+
+### CI/CD Pipeline (GitHub Actions)
+
+<!-- TODO: Capture screenshot of a passing CI run.
+     Steps:
+       1. Push code to GitHub (already done)
+       2. Go to https://github.com/vishvajitbhagave-dev/TreasuryGuard/actions
+       3. Click on the most recent workflow run (should show green checkmarks)
+       4. Screenshot the full page showing both jobs passing:
+          - "Smart Contracts" (Rust build + cargo test) — green ✓
+          - "Frontend" (npm lint + npm test + npm build) — green ✓
+       5. Save as public/ci-pipeline.png and uncomment the line below
+-->
+<!-- ![CI/CD Pipeline](public/ci-pipeline.png) -->
+
+### Test Output
+
+<!-- TODO: Capture screenshot of passing tests.
+     Run this command in the frontend/ directory:
+       cd frontend && npm run test
+     The output should show 11 passing tests. Screenshot the terminal output.
+     Then run in the project root:
+       cargo test --manifest-path contracts/Cargo.toml
+     The output should show 3 passing tests. Screenshot that too.
+     Save as public/test-output.png and uncomment the line below
+-->
+<!-- ![Test Output](public/test-output.png) -->
+
+---
+
+## 🔗 Verified Transactions
+
+<!-- TODO: After performing a real testnet transaction, add the hash here.
+     Steps:
+       1. Open the app, switch to Stellar Testnet, connect your Freighter wallet
+       2. Go to Dashboard → click "Establish Trustline" (if not done), then "Request Faucet"
+       3. Deposit a small amount (e.g. 10 USDC) into the vault
+       4. Copy the tx hash from the green success notification banner
+       5. Replace <YOUR_TX_HASH> in the link below
+-->
+<!-- - [Deposit TX](https://stellar.expert/explorer/testnet/tx/<YOUR_TX_HASH>) — depositing USDC into the vault -->
+
+_No verified transactions yet — pending first live testnet interaction._
+
+---
+
+## 🎬 Demo Video
+
+<!-- TODO: Record a 1–2 minute screen recording covering:
+     0:00–0:10  — Intro: show the landing page, explain it's a multi-sig vault on Stellar
+     0:10–0:25  — Connect Wallet: click Connect, show multi-wallet dropdown, connect with Freighter
+     0:25–0:40  — Dashboard overview: show vault balance, token balance, stat cards
+     0:40–0:55  — Deposit: enter amount, click Deposit, show spinner → success notification with tx hash
+     0:55–1:10  — Submit Proposal: fill recipient/amount/description, submit, show it appear in the Requests list
+     1:10–1:25  — Approve & Execute: click Approve (show threshold update), click Execute (show final tx)
+     1:25–1:40  — Real-time events: point out the Activity Log updating live
+     1:40–2:00  — Wrap up: show network toggle (Simulation ↔ Testnet), mobile responsive view
+
+     Record with OBS Studio (free) or use https://screenrec.com for browser recording.
+     Upload to YouTube (unlisted) or Loom, then paste the link below.
+-->
+🔗 **Demo Video:** _Recording pending — [record with Loom](https://loom.com) or OBS Studio_
+
+---
+
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -89,7 +209,27 @@ Ensure you have the following installed:
 
 ---
 
-### 1. Smart Contract Development & Testing
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/vishvajitbhagave-dev/TreasuryGuard.git
+cd TreasuryGuard
+```
+
+---
+
+### 2. Environment Variables
+
+No `.env` file is required for local development. All configuration is handled through:
+
+- **Smart contracts**: Deployed contract addresses are auto-generated into `frontend/src/config/contracts.json` by the deployment scripts.
+- **Network**: The app defaults to Simulation mode. Switch to Stellar Testnet via the toggle in the header — no RPC URL configuration needed.
+
+If you deploy your own contracts, the deploy scripts automatically update `frontend/src/config/contracts.json`.
+
+---
+
+### 3. Smart Contract Development & Testing
 
 The contracts live in the `/contracts` directory.
 
@@ -106,7 +246,7 @@ The contracts live in the `/contracts` directory.
 
 ---
 
-### 2. Frontend Development & Testing
+### 4. Frontend Development & Testing
 
 The dashboard is built using Next.js 16/React 19 and Tailwind CSS.
 
@@ -130,7 +270,7 @@ The dashboard is built using Next.js 16/React 19 and Tailwind CSS.
 
 ---
 
-### 3. Deploying & Upgrading Contracts
+### 5. Deploying & Upgrading Contracts
 
 Deployment configuration is saved automatically to the frontend (`frontend/src/config/contracts.json`).
 
@@ -156,7 +296,7 @@ Deployment configuration is saved automatically to the frontend (`frontend/src/c
 
 ---
 
-### 4. Running with Docker (Production Ready)
+### 6. Running with Docker (Production Ready)
 
 To build and run the Next.js application inside a lightweight optimized production Docker container:
 
