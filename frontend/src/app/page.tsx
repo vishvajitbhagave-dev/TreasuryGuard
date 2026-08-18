@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { 
   VaultConfig, 
   SpendingRequest, 
@@ -21,7 +21,6 @@ import {
 } from "./simulation";
 import { 
   connectWallet, 
-  isFreighterInstalled, 
   CONTRACTS,
   depositToVault,
   submitRequestToVault,
@@ -37,6 +36,7 @@ import {
   sendXlmTransaction,
   fetchContractEvents
 } from "./stellar";
+import { WALLET_PROVIDERS, WalletProviderId } from "./wallet-adapters";
 
 const isValidStellarAddress = (addr: string) => {
   return /^[G][A-D][A-Z2-7]{54}$/.test(addr);
@@ -84,15 +84,30 @@ export default function Home() {
   
   // Loading animations
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
-  const [isFreighterAvailable, setIsFreighterAvailable] = useState<boolean>(false);
+  const [selectedWalletId, setSelectedWalletId] = useState<WalletProviderId>("freighter");
+  const [showWalletSelector, setShowWalletSelector] = useState<boolean>(false);
 
-  // Check Freighter availability on load
-  useEffect(() => {
-    isFreighterInstalled().then(setIsFreighterAvailable);
-  }, []);
+  // Flash Notification helper
+  const triggerNotification = (type: "success" | "error" | "info", message: string) => {
+    setNotification({ type, message });
+    setTimeout(() => {
+      setNotification(null);
+    }, 5000);
+  };
+
+  // Helper to format addresses or names
+  const getAccountLabel = (addr: string) => {
+    if (!addr) return "Unknown";
+    if (addr === SIM_ACCOUNTS.ADMIN) return "Admin (Contract Owner)";
+    if (addr === SIM_ACCOUNTS.ALICE) return "Alice (Member)";
+    if (addr === SIM_ACCOUNTS.BOB) return "Bob (Member)";
+    if (addr === SIM_ACCOUNTS.CHARLIE) return "Charlie (Member)";
+    if (addr === SIM_ACCOUNTS.RECIPIENT) return "Recipient Merchant";
+    return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
+  };
 
   // Fetch / Sync State based on Network Mode
-  const syncState = async () => {
+  const syncState = useCallback(async () => {
     if (networkMode === "simulation") {
       const state: SimState = getSimulationState();
       setConfig(state.config);
@@ -140,11 +155,14 @@ export default function Home() {
         console.error("Error syncing testnet state:", err);
       }
     }
-  };
+  }, [networkMode, wallet.address]);
 
   useEffect(() => {
-    syncState();
-  }, [networkMode, wallet.address]);
+    const timer = setTimeout(() => {
+      syncState();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [syncState]);
 
   // Poll live testnet data every 10 seconds for real-time event integration (Level 2)
   useEffect(() => {
@@ -153,7 +171,7 @@ export default function Home() {
       syncState();
     }, 10000);
     return () => clearInterval(interval);
-  }, [networkMode, wallet.address]);
+  }, [networkMode, syncState]);
 
   // Background Simulator Engine for Simulation Mode (Level 3 Event Streaming & Real-Time simulation)
   useEffect(() => {
@@ -220,15 +238,7 @@ export default function Home() {
     }, 20000); // Trigger every 20 seconds to keep the simulation alive and realistic
 
     return () => clearInterval(interval);
-  }, [networkMode, activeSimUser]);
-
-  // Flash Notification helper
-  const triggerNotification = (type: "success" | "error" | "info", message: string) => {
-    setNotification({ type, message });
-    setTimeout(() => {
-      setNotification(null);
-    }, 5000);
-  };
+  }, [networkMode, activeSimUser, syncState]);
 
   // Switch Simulated Member User
   const handleUserChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -236,26 +246,17 @@ export default function Home() {
     triggerNotification("info", `Switched active simulation member to ${getAccountLabel(e.target.value)}`);
   };
 
-  // Helper to format addresses or names
-  const getAccountLabel = (addr: string) => {
-    if (!addr) return "Unknown";
-    if (addr === SIM_ACCOUNTS.ADMIN) return "Admin (Contract Owner)";
-    if (addr === SIM_ACCOUNTS.ALICE) return "Alice (Member)";
-    if (addr === SIM_ACCOUNTS.BOB) return "Bob (Member)";
-    if (addr === SIM_ACCOUNTS.CHARLIE) return "Charlie (Member)";
-    if (addr === SIM_ACCOUNTS.RECIPIENT) return "Recipient Merchant";
-    return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
-  };
-
   const getSimulatedUserBalance = () => {
     return userBalances[activeSimUser] || "0";
   };
 
-  // Connect Freighter Wallet
-  const handleConnectWallet = async () => {
+  // Connect Wallet
+  const handleConnectWallet = async (providerId?: WalletProviderId) => {
+    const pid = providerId || selectedWalletId;
     setLoadingAction("connect_wallet");
     try {
-      const pubKey = await connectWallet();
+      const pubKey = await connectWallet(pid);
+      const providerInfo = WALLET_PROVIDERS.find((p) => p.id === pid);
       let liveBalance = "0";
       let liveXlmBalance = "0";
       try {
@@ -269,9 +270,12 @@ export default function Home() {
         balance: liveBalance,
         xlmBalance: liveXlmBalance,
         isConnected: true,
-        error: null
+        error: null,
+        walletProvider: pid,
+        walletName: providerInfo?.name || pid,
       });
-      triggerNotification("success", "Successfully connected Freighter wallet!");
+      setShowWalletSelector(false);
+      triggerNotification("success", `Successfully connected ${providerInfo?.name || pid} wallet!`);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       setWallet(w => ({ ...w, error: errorMsg }));
@@ -286,8 +290,9 @@ export default function Home() {
     setWallet({
       address: null,
       balance: "0",
+      xlmBalance: "0",
       isConnected: false,
-      error: null
+      error: null,
     });
     triggerNotification("info", "Wallet disconnected.");
   };
@@ -295,15 +300,16 @@ export default function Home() {
   // Trustline Action
   const handleEstablishTrustline = async () => {
     if (!wallet.address) {
-      triggerNotification("error", "Please connect Freighter wallet first.");
+      triggerNotification("error", "Please connect a wallet first.");
       return;
     }
     setLoadingAction("establish_trustline");
     try {
-      const txHash = await establishTrustline(wallet.address);
+      const txHash = await establishTrustline(wallet.address, wallet.walletProvider as WalletProviderId || "freighter");
       triggerNotification("success", `Trustline established! Tx Hash: ${txHash.substring(0, 12)}...`);
-    } catch (err: any) {
-      triggerNotification("error", err.message || String(err));
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      triggerNotification("error", errorMsg);
     } finally {
       setLoadingAction(null);
     }
@@ -312,7 +318,7 @@ export default function Home() {
   // Faucet Action
   const handleRequestFaucet = async () => {
     if (!wallet.address) {
-      triggerNotification("error", "Please connect Freighter wallet first.");
+      triggerNotification("error", "Please connect a wallet first.");
       return;
     }
     setLoadingAction("request_faucet");
@@ -328,8 +334,9 @@ export default function Home() {
       }
       triggerNotification("success", `Faucet success: ${data.message}`);
       syncState();
-    } catch (err: any) {
-      triggerNotification("error", err.message || String(err));
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      triggerNotification("error", errorMsg);
     } finally {
       setLoadingAction(null);
     }
@@ -377,18 +384,19 @@ export default function Home() {
         setAmountXlm("");
       } else {
         if (!wallet.address) {
-          triggerNotification("error", "Please connect Freighter wallet first.");
+          triggerNotification("error", "Please connect a wallet first.");
           setLoadingAction(null);
           return;
         }
-        const txHash = await sendXlmTransaction(wallet.address, recipientXlm, amountXlm);
+        const txHash = await sendXlmTransaction(wallet.address, recipientXlm, amountXlm, wallet.walletProvider as WalletProviderId || "freighter");
         triggerNotification("success", `Payment Sent! Hash: ${txHash.substring(0, 16)}...`);
         setRecipientXlm("");
         setAmountXlm("");
         syncState();
       }
-    } catch (err: any) {
-      triggerNotification("error", err.message || String(err));
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      triggerNotification("error", errorMsg);
     } finally {
       setLoadingAction(null);
     }
@@ -415,7 +423,7 @@ export default function Home() {
       }
     } else {
       if (!wallet.address) {
-        triggerNotification("error", "Please connect Freighter wallet first.");
+        triggerNotification("error", "Please connect a wallet first.");
         return;
       }
       const userBal = parseFloat(wallet.balance || "0");
@@ -435,13 +443,14 @@ export default function Home() {
         setDepositAmount("");
         triggerNotification("success", `Deposited ${amount} USDC into the vault!`);
       } else {
-        const txHash = await depositToVault(CONTRACTS.vaultId, amount, wallet.address!);
+        const txHash = await depositToVault(CONTRACTS.vaultId, amount, wallet.address!, wallet.walletProvider as WalletProviderId || "freighter");
         triggerNotification("success", `Deposit successful! Tx Hash: ${txHash.substring(0, 12)}...`);
         setDepositAmount("");
         syncState();
       }
-    } catch (err: any) {
-      triggerNotification("error", err.message || String(err));
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      triggerNotification("error", errorMsg);
     } finally {
       setLoadingAction(null);
     }
@@ -496,7 +505,7 @@ export default function Home() {
         triggerNotification("success", "Spending request submitted successfully!");
       } else {
         if (!wallet.address) {
-          triggerNotification("error", "Please connect Freighter wallet first.");
+          triggerNotification("error", "Please connect a wallet first.");
           setLoadingAction(null);
           return;
         }
@@ -505,14 +514,16 @@ export default function Home() {
           wallet.address,
           newRequest.recipient,
           newRequest.amount,
-          newRequest.description
+          newRequest.description,
+          wallet.walletProvider as WalletProviderId || "freighter"
         );
         triggerNotification("success", `Request submitted! Tx Hash: ${txHash.substring(0, 12)}...`);
         setNewRequest({ recipient: "", amount: "", description: "" });
         syncState();
       }
-    } catch (err: any) {
-      triggerNotification("error", err.message || String(err));
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      triggerNotification("error", errorMsg);
     } finally {
       setLoadingAction(null);
     }
@@ -537,16 +548,17 @@ export default function Home() {
         triggerNotification("success", `Approved request #${id}`);
       } else {
         if (!wallet.address) {
-          triggerNotification("error", "Please connect Freighter wallet first.");
+          triggerNotification("error", "Please connect a wallet first.");
           setLoadingAction(null);
           return;
         }
-        const txHash = await approveRequestInVault(CONTRACTS.vaultId, wallet.address, id);
+        const txHash = await approveRequestInVault(CONTRACTS.vaultId, wallet.address, id, wallet.walletProvider as WalletProviderId || "freighter");
         triggerNotification("success", `Request #${id} approved! Tx Hash: ${txHash.substring(0, 12)}...`);
         syncState();
       }
-    } catch (err: any) {
-      triggerNotification("error", err.message || String(err));
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      triggerNotification("error", errorMsg);
     } finally {
       setLoadingAction(null);
     }
@@ -574,16 +586,17 @@ export default function Home() {
         triggerNotification("success", `Request #${id} executed! Funds transferred successfully.`);
       } else {
         if (!wallet.address) {
-          triggerNotification("error", "Please connect Freighter wallet first.");
+          triggerNotification("error", "Please connect a wallet first.");
           setLoadingAction(null);
           return;
         }
-        const txHash = await executeRequestInVault(CONTRACTS.vaultId, wallet.address, id);
+        const txHash = await executeRequestInVault(CONTRACTS.vaultId, wallet.address, id, wallet.walletProvider as WalletProviderId || "freighter");
         triggerNotification("success", `Request #${id} executed! Tx Hash: ${txHash.substring(0, 12)}...`);
         syncState();
       }
-    } catch (err: any) {
-      triggerNotification("error", err.message || String(err));
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      triggerNotification("error", errorMsg);
     } finally {
       setLoadingAction(null);
     }
@@ -599,16 +612,17 @@ export default function Home() {
         triggerNotification("success", `Request #${id} cancelled.`);
       } else {
         if (!wallet.address) {
-          triggerNotification("error", "Please connect Freighter wallet first.");
+          triggerNotification("error", "Please connect a wallet first.");
           setLoadingAction(null);
           return;
         }
-        const txHash = await cancelRequestInVault(CONTRACTS.vaultId, wallet.address, id);
+        const txHash = await cancelRequestInVault(CONTRACTS.vaultId, wallet.address, id, wallet.walletProvider as WalletProviderId || "freighter");
         triggerNotification("success", `Request #${id} cancelled! Tx Hash: ${txHash.substring(0, 12)}...`);
         syncState();
       }
-    } catch (err: any) {
-      triggerNotification("error", err.message || String(err));
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      triggerNotification("error", errorMsg);
     } finally {
       setLoadingAction(null);
     }
@@ -683,7 +697,7 @@ export default function Home() {
             </div>
           ) : (
             /* Wallet Connection (Testnet Only) */
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 relative">
               {wallet.isConnected ? (
                 <div className="flex items-center gap-3">
                   <div className="text-right">
@@ -695,6 +709,9 @@ export default function Home() {
                       <span className="text-slate-650">|</span>
                       <span className="text-blue-400">{wallet.xlmBalance || "0"} XLM</span>
                     </div>
+                    {wallet.walletName && (
+                      <p className="text-[8px] text-slate-500 font-mono mt-0.5">via {wallet.walletName}</p>
+                    )}
                   </div>
                   <button
                     onClick={handleDisconnectWallet}
@@ -704,28 +721,69 @@ export default function Home() {
                   </button>
                 </div>
               ) : (
-                <button
-                  onClick={handleConnectWallet}
-                  disabled={loadingAction === "connect_wallet"}
-                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white text-xs rounded-lg font-semibold transition-all shadow-md shadow-blue-500/10 flex items-center gap-2 cursor-pointer border border-blue-400/20"
-                >
-                  {loadingAction === "connect_wallet" ? (
-                    <>
-                      <svg className="animate-spin h-3 w-3 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Connecting...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-                      </svg>
-                      Connect Freighter
-                    </>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowWalletSelector(!showWalletSelector)}
+                    disabled={loadingAction === "connect_wallet"}
+                    className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-500 text-xs rounded-lg font-semibold transition-all shadow-md shadow-blue-500/10 flex items-center gap-2 cursor-pointer border border-blue-400/20"
+                  >
+                    {loadingAction === "connect_wallet" ? (
+                      <>
+                        <svg className="animate-spin h-3 w-3 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Connecting...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                        Connect Wallet
+                        <svg className="w-3 h-3 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Wallet Selector Dropdown */}
+                  {showWalletSelector && !wallet.isConnected && (
+                    <div className="absolute top-full mt-2 right-0 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl shadow-black/50 z-50 min-w-[220px] overflow-hidden">
+                      <div className="p-2 border-b border-slate-800">
+                        <p className="text-[9px] uppercase font-mono text-slate-500 font-bold tracking-wider px-2">Select Wallet</p>
+                      </div>
+                      <div className="p-1.5">
+                        {WALLET_PROVIDERS.map((provider) => (
+                          <button
+                            key={provider.id}
+                            onClick={() => {
+                              setSelectedWalletId(provider.id);
+                              handleConnectWallet(provider.id);
+                            }}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all ${
+                              selectedWalletId === provider.id
+                                ? "bg-blue-950/40 border border-blue-800/40"
+                                : "hover:bg-slate-800/60 border border-transparent"
+                            }`}
+                          >
+                            <span className="text-lg">{provider.icon}</span>
+                            <div className="flex-1">
+                              <p className="text-xs font-semibold text-white">{provider.name}</p>
+                              <p className="text-[9px] text-slate-500 font-mono">Browser Extension</p>
+                            </div>
+                            {selectedWalletId === provider.id && (
+                              <svg className="w-3.5 h-3.5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   )}
-                </button>
+                </div>
               )}
             </div>
           )}

@@ -1,6 +1,6 @@
-import { isConnected, getAddress, signTransaction } from "@stellar/freighter-api";
 import * as StellarSdk from "@stellar/stellar-sdk";
-import { VaultConfig, SpendingRequest } from "./types";
+import { VaultConfig, SpendingRequest, ActivityLog } from "./types";
+import { getWalletProvider, WalletProviderId } from "./wallet-adapters";
 
 // Fallback contract constants in case deploy.ps1 hasn't been run or config is missing
 export const DEFAULT_CONTRACTS = {
@@ -36,39 +36,55 @@ try {
 export const CONTRACTS = contractsConfig;
 
 /**
- * Checks if Freighter Wallet is installed
+ * Checks if Freighter Wallet is installed (backward compat)
  */
 export async function isFreighterInstalled(): Promise<boolean> {
   if (typeof window === "undefined") return false;
   try {
-    const connected = await isConnected();
-    return !!connected;
+    const provider = getWalletProvider("freighter");
+    return await provider.isAvailable();
   } catch {
     return false;
   }
 }
 
 /**
- * Connects to Freighter and retrieves public key
+ * Connects to a wallet and retrieves public key
  */
-export async function connectWallet(): Promise<string> {
-  const installed = await isFreighterInstalled();
-  if (!installed) {
-    throw new Error("Freighter wallet is not installed. Please install it to continue.");
+export async function connectWallet(providerId: WalletProviderId = "freighter"): Promise<string> {
+  const provider = getWalletProvider(providerId);
+  const available = await provider.isAvailable();
+  if (!available) {
+    throw new Error(`${provider.name} wallet is not installed. Please install it to continue.`);
   }
   try {
-    const { address, error } = await getAddress();
-    if (error) {
-      throw new Error(error);
-    }
-    if (!address) {
-      throw new Error("Failed to retrieve address from Freighter wallet.");
-    }
-    return address;
+    return await provider.connect();
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    throw new Error("Freighter connection rejected: " + errorMsg);
+    throw new Error(`${provider.name} connection rejected: ${errorMsg}`);
   }
+}
+
+/**
+ * Signs a transaction using the specified wallet provider
+ */
+export async function signWithWallet(
+  xdr: string,
+  userPublicKey: string,
+  providerId: WalletProviderId = "freighter"
+): Promise<string> {
+  const provider = getWalletProvider(providerId);
+  const signResult = await provider.signTransaction(xdr, {
+    networkPassphrase: TESTNET_PASSPHRASE,
+    address: userPublicKey,
+  });
+  if (signResult.error) {
+    throw new Error(`${provider.name} signing failed: ${signResult.error}`);
+  }
+  if (!signResult.signedTxXdr) {
+    throw new Error(`${provider.name} did not return a signed transaction XDR.`);
+  }
+  return signResult.signedTxXdr;
 }
 
 /**
@@ -83,14 +99,15 @@ export function getRpcServer(): StellarSdk.rpc.Server {
  */
 export async function fetchContractConfig(vaultId: string): Promise<VaultConfig> {
   try {
-    const adminAddress = await invokeReadOnlyMethod(vaultId, "get_config");
+    const result = await invokeReadOnlyMethod(vaultId, "get_config");
     // get_config returns VaultConfig struct in Rust, converted to native object:
     // { admin: string, token: string, registry: string, threshold: number }
+    const cfg = result as Record<string, string | number>;
     return {
-      admin: adminAddress.admin,
-      token: adminAddress.token,
-      registry: adminAddress.registry,
-      threshold: Number(adminAddress.threshold),
+      admin: String(cfg.admin),
+      token: String(cfg.token),
+      registry: String(cfg.registry),
+      threshold: Number(cfg.threshold),
     };
   } catch {
     return {
@@ -110,15 +127,16 @@ export async function fetchContractRequest(vaultId: string, requestId: number): 
     const requestVal = await invokeReadOnlyMethod(vaultId, "get_request", [
       StellarSdk.nativeToScVal(BigInt(requestId), { type: "u64" })
     ]);
+    const req = requestVal as Record<string, string | number>;
     return {
-      id: Number(requestVal.id),
-      recipient: requestVal.recipient,
-      amount: requestVal.amount.toString(),
-      description: requestVal.description,
-      approvalsCount: Number(requestVal.approvals_count),
-      status: Number(requestVal.status) as 0 | 1 | 2,
-      createdAt: Number(requestVal.created_at) * 1000,
-      proposer: requestVal.proposer,
+      id: Number(req.id),
+      recipient: String(req.recipient),
+      amount: String(req.amount),
+      description: String(req.description),
+      approvalsCount: Number(req.approvals_count),
+      status: Number(req.status) as 0 | 1 | 2,
+      createdAt: Number(req.created_at) * 1000,
+      proposer: String(req.proposer),
     };
   } catch {
     return {
@@ -188,6 +206,15 @@ export async function fetchTokenBalance(tokenId: string, address: string): Promi
   }
 }
 
+interface HorizonBalance {
+  asset_type: string;
+  balance: string;
+}
+
+interface HorizonAccountResponse {
+  balances: HorizonBalance[];
+}
+
 /**
  * Invokes a read-only Soroban contract function via simulation to fetch state
  */
@@ -195,7 +222,7 @@ export async function invokeReadOnlyMethod(
   contractId: string,
   methodName: string,
   args: StellarSdk.xdr.ScVal[] = []
-): Promise<any> {
+): Promise<Record<string, unknown>> {
   const server = getRpcServer();
   const dummyAccount = new StellarSdk.Account(
     CONTRACTS.adminAddress && CONTRACTS.adminAddress.startsWith("G") && CONTRACTS.adminAddress.length === 56
@@ -215,20 +242,21 @@ export async function invokeReadOnlyMethod(
     
   const simResult = await server.simulateTransaction(tx);
   if (StellarSdk.rpc.Api.isSimulationSuccess(simResult) && simResult.result && simResult.result.retval) {
-    return StellarSdk.scValToNative(simResult.result.retval);
+    return StellarSdk.scValToNative(simResult.result.retval) as Record<string, unknown>;
   }
   
   throw new Error("Failed to read value from contract simulation.");
 }
 
 /**
- * Invokes a state-modifying Soroban contract function via Freighter signature
+ * Invokes a state-modifying Soroban contract function via wallet signature
  */
 export async function invokeContractMethod(
   contractId: string,
   methodName: string,
   args: StellarSdk.xdr.ScVal[],
-  userPublicKey: string
+  userPublicKey: string,
+  providerId: WalletProviderId = "freighter"
 ): Promise<string> {
   const server = getRpcServer();
   
@@ -254,18 +282,12 @@ export async function invokeContractMethod(
   // 4. Assemble Transaction (attaching footprint and gas fee calculations)
   const preparedTx = StellarSdk.rpc.assembleTransaction(tx, simResult).build();
   
-  // 5. Sign with Freighter Wallet
+  // 5. Sign with Wallet
   const unsignedXdr = preparedTx.toXDR();
-  const signResult = await signTransaction(unsignedXdr, { networkPassphrase: TESTNET_PASSPHRASE, address: userPublicKey });
-  if (signResult.error) {
-    throw new Error(`Freighter signing failed: ${signResult.error}`);
-  }
-  if (!signResult.signedTxXdr) {
-    throw new Error("Freighter did not return a signed transaction XDR.");
-  }
+  const signedXdr = await signWithWallet(unsignedXdr, userPublicKey, providerId);
   
   // 6. Submit signed XDR to Stellar network
-  const signedTx = StellarSdk.TransactionBuilder.fromXDR(signResult.signedTxXdr, TESTNET_PASSPHRASE);
+  const signedTx = StellarSdk.TransactionBuilder.fromXDR(signedXdr, TESTNET_PASSPHRASE);
   const submitResult = await server.sendTransaction(signedTx);
   
   if (submitResult.status === "ERROR") {
@@ -303,13 +325,14 @@ export async function invokeContractMethod(
 export async function depositToVault(
   vaultId: string,
   amount: string,
-  fromAddress: string
+  fromAddress: string,
+  providerId: WalletProviderId = "freighter"
 ): Promise<string> {
   const args = [
     StellarSdk.nativeToScVal(fromAddress, { type: "address" }),
     StellarSdk.nativeToScVal(BigInt(amount), { type: "i128" }),
   ];
-  return invokeContractMethod(vaultId, "deposit", args, fromAddress);
+  return invokeContractMethod(vaultId, "deposit", args, fromAddress, providerId);
 }
 
 export async function submitRequestToVault(
@@ -317,7 +340,8 @@ export async function submitRequestToVault(
   proposer: string,
   recipient: string,
   amount: string,
-  description: string
+  description: string,
+  providerId: WalletProviderId = "freighter"
 ): Promise<string> {
   const args = [
     StellarSdk.nativeToScVal(proposer, { type: "address" }),
@@ -325,49 +349,55 @@ export async function submitRequestToVault(
     StellarSdk.nativeToScVal(BigInt(amount), { type: "i128" }),
     StellarSdk.nativeToScVal(description, { type: "string" }),
   ];
-  return invokeContractMethod(vaultId, "submit_request", args, proposer);
+  return invokeContractMethod(vaultId, "submit_request", args, proposer, providerId);
 }
 
 export async function approveRequestInVault(
   vaultId: string,
   approver: string,
-  requestId: number
+  requestId: number,
+  providerId: WalletProviderId = "freighter"
 ): Promise<string> {
   const args = [
     StellarSdk.nativeToScVal(approver, { type: "address" }),
     StellarSdk.nativeToScVal(BigInt(requestId), { type: "u64" }),
   ];
-  return invokeContractMethod(vaultId, "approve_request", args, approver);
+  return invokeContractMethod(vaultId, "approve_request", args, approver, providerId);
 }
 
 export async function executeRequestInVault(
   vaultId: string,
   executor: string,
-  requestId: number
+  requestId: number,
+  providerId: WalletProviderId = "freighter"
 ): Promise<string> {
   const args = [
     StellarSdk.nativeToScVal(executor, { type: "address" }),
     StellarSdk.nativeToScVal(BigInt(requestId), { type: "u64" }),
   ];
-  return invokeContractMethod(vaultId, "execute_request", args, executor);
+  return invokeContractMethod(vaultId, "execute_request", args, executor, providerId);
 }
 
 export async function cancelRequestInVault(
   vaultId: string,
   canceller: string,
-  requestId: number
+  requestId: number,
+  providerId: WalletProviderId = "freighter"
 ): Promise<string> {
   const args = [
     StellarSdk.nativeToScVal(canceller, { type: "address" }),
     StellarSdk.nativeToScVal(BigInt(requestId), { type: "u64" }),
   ];
-  return invokeContractMethod(vaultId, "cancel_request", args, canceller);
+  return invokeContractMethod(vaultId, "cancel_request", args, canceller, providerId);
 }
 
 /**
  * Establishes a trustline for the mock USDC token
  */
-export async function establishTrustline(userPublicKey: string): Promise<string> {
+export async function establishTrustline(
+  userPublicKey: string,
+  providerId: WalletProviderId = "freighter"
+): Promise<string> {
   const server = getRpcServer();
   const account = await server.getAccount(userPublicKey);
   const asset = new StellarSdk.Asset("USDC", CONTRACTS.adminAddress);
@@ -380,19 +410,9 @@ export async function establishTrustline(userPublicKey: string): Promise<string>
     .build();
 
   const unsignedXdr = tx.toXDR();
-  const signResult = await signTransaction(unsignedXdr, { 
-    networkPassphrase: TESTNET_PASSPHRASE, 
-    address: userPublicKey 
-  });
+  const signedXdr = await signWithWallet(unsignedXdr, userPublicKey, providerId);
   
-  if (signResult.error) {
-    throw new Error(`Freighter signing failed: ${signResult.error}`);
-  }
-  if (!signResult.signedTxXdr) {
-    throw new Error("Freighter did not return a signed transaction XDR.");
-  }
-  
-  const signedTx = StellarSdk.TransactionBuilder.fromXDR(signResult.signedTxXdr, TESTNET_PASSPHRASE);
+  const signedTx = StellarSdk.TransactionBuilder.fromXDR(signedXdr, TESTNET_PASSPHRASE);
   const submitResult = await server.sendTransaction(signedTx);
   
   if (submitResult.status === "ERROR") {
@@ -431,8 +451,8 @@ export async function fetchXlmBalance(address: string): Promise<string> {
   try {
     const response = await fetch(`https://horizon-testnet.stellar.org/accounts/${address}`);
     if (!response.ok) return "0";
-    const data = await response.json();
-    const nativeBalance = data.balances.find((b: any) => b.asset_type === "native");
+    const data: HorizonAccountResponse = await response.json();
+    const nativeBalance = data.balances.find((b) => b.asset_type === "native");
     return nativeBalance ? nativeBalance.balance : "0";
   } catch (err) {
     console.error("Error fetching XLM balance:", err);
@@ -441,12 +461,13 @@ export async function fetchXlmBalance(address: string): Promise<string> {
 }
 
 /**
- * Sends a native XLM payment transaction on the Stellar Testnet signed with Freighter
+ * Sends a native XLM payment transaction on the Stellar Testnet signed via wallet
  */
 export async function sendXlmTransaction(
   fromAddress: string,
   toAddress: string,
-  amount: string
+  amount: string,
+  providerId: WalletProviderId = "freighter"
 ): Promise<string> {
   const server = getRpcServer();
   const account = await server.getAccount(fromAddress);
@@ -467,19 +488,9 @@ export async function sendXlmTransaction(
     .build();
 
   const unsignedXdr = tx.toXDR();
-  const signResult = await signTransaction(unsignedXdr, { 
-    networkPassphrase: TESTNET_PASSPHRASE, 
-    address: fromAddress 
-  });
+  const signedXdr = await signWithWallet(unsignedXdr, fromAddress, providerId);
   
-  if (signResult.error) {
-    throw new Error(`Freighter signing failed: ${signResult.error}`);
-  }
-  if (!signResult.signedTxXdr) {
-    throw new Error("Freighter did not return a signed transaction XDR.");
-  }
-  
-  const signedTx = StellarSdk.TransactionBuilder.fromXDR(signResult.signedTxXdr, TESTNET_PASSPHRASE);
+  const signedTx = StellarSdk.TransactionBuilder.fromXDR(signedXdr, TESTNET_PASSPHRASE);
   const submitResult = await server.sendTransaction(signedTx);
   
   if (submitResult.status === "ERROR") {
@@ -514,7 +525,7 @@ export async function sendXlmTransaction(
 /**
  * Fetch event logs from Soroban RPC for a contract
  */
-export async function fetchContractEvents(contractId: string): Promise<any[]> {
+export async function fetchContractEvents(contractId: string): Promise<ActivityLog[]> {
   const server = getRpcServer();
   try {
     const latestLedgerRes = await server.getLatestLedger();

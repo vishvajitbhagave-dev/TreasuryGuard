@@ -26,10 +26,11 @@ export async function POST(req: NextRequest) {
       message: "Successfully minted 5,000 USDC to your wallet!",
       hash: stdout.trim()
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Faucet error details:", err);
+    const errorMessage = err instanceof Error ? err.message : "Failed to execute faucet transaction. Make sure the deployer account is funded.";
     return NextResponse.json({
-      error: err.message || "Failed to execute faucet transaction. Make sure the deployer account is funded."
+      error: errorMessage
     }, { status: 500 });
   }
 }

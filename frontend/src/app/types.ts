@@ -32,4 +32,6 @@ export interface WalletState {
   xlmBalance?: string;
   isConnected: boolean;
   error: string | null;
+  walletProvider?: string;
+  walletName?: string;
 }
