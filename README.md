@@ -6,17 +6,7 @@ This repository is fully compliant with **Level 3 Smart Contract & Web Applicati
 
 ### 🌐 Live Demo
 
-<!-- TODO: Deploy to Vercel and paste the URL here.
-     Fastest way to deploy:
-       1. Push this repo to GitHub (already done)
-       2. Go to https://vercel.com/new
-       3. Import the GitHub repo "vishvajitbhagave-dev/TreasuryGuard"
-       4. Set "Root Directory" to "frontend"
-       5. Framework Preset: Next.js (auto-detected)
-       6. Click Deploy — done in ~60 seconds
-       7. Copy the production URL (e.g. https://treasury-guard.vercel.app) below
--->
-🔗 **Live App:** _Not deployed yet — [deploy on Vercel](https://vercel.com/new)_
+🔗 **Live App:** [https://treasury-guard.vercel.app](https://treasury-guard.vercel.app/)
 
 ---
 
@@ -110,15 +100,7 @@ All contracts are deployed on **Stellar Testnet**. Addresses are auto-loaded fro
 
 ### Wallet Selector (Multi-Wallet Support)
 
-<!-- TODO: Capture screenshot of wallet dropdown.
-     Steps:
-       1. npm run dev → open http://localhost:3000
-       2. Switch to "Stellar Testnet" mode in the header toggle
-       3. Click "Connect Wallet" button
-       4. Screenshot the dropdown showing Freighter / LOBSTR / Rabet
-       5. Save as public/wallet-selector.png and uncomment the line below
--->
-<!-- ![Wallet Selector](public/wallet-selector.png) -->
+![Wallet Selector](public/wallet-selector.png)
 
 ### Mobile Responsive UI
 
@@ -165,17 +147,10 @@ All contracts are deployed on **Stellar Testnet**. Addresses are auto-loaded fro
 
 ## 🔗 Verified Transactions
 
-<!-- TODO: After performing a real testnet transaction, add the hash here.
-     Steps:
-       1. Open the app, switch to Stellar Testnet, connect your Freighter wallet
-       2. Go to Dashboard → click "Establish Trustline" (if not done), then "Request Faucet"
-       3. Deposit a small amount (e.g. 10 USDC) into the vault
-       4. Copy the tx hash from the green success notification banner
-       5. Replace <YOUR_TX_HASH> in the link below
--->
-<!-- - [Deposit TX](https://stellar.expert/explorer/testnet/tx/<YOUR_TX_HASH>) — depositing USDC into the vault -->
+All transactions below are live on **Stellar Testnet** and verifiable on [Stellar Expert](https://stellar.expert/explorer/testnet).
 
-_No verified transactions yet — pending first live testnet interaction._
+- [Vault Core Initialize TX](https://stellar.expert/explorer/testnet/tx/efeb0af4f07db267c428cb5a01cd91d360d69a5a9ad760ffba1b3c4abf444a05) — contract call initializing Vault Core with admin, USDC token, registry, signing threshold and member list (Aug 7, 2026)
+- [Vault Registry Initialize TX](https://stellar.expert/explorer/testnet/tx/bc7943b753a4e5cd1b47b0af057005c55fc4b82abde675b172a34ec993cfd4ed) — contract call initializing the Vault Registry admin (Aug 7, 2026)
 
 ---
 
