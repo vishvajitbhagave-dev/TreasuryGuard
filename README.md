@@ -100,19 +100,19 @@ All contracts are deployed on **Stellar Testnet**. Addresses are auto-loaded fro
 
 ### Wallet Selector (Multi-Wallet Support)
 
-![Wallet Selector](public/wallet-selector.png)
+![Wallet Selector](frontend/public/wallet-selector.png)
 
 ### Mobile Responsive UI
 
-![Mobile Responsive](public/mobile-responsive.png)
+![Mobile Responsive](frontend/public/mobile-responsive.png)
 
 ### CI/CD Pipeline (GitHub Actions)
 
-![CI/CD Pipeline](public/ci-pipeline.png)
+![CI/CD Pipeline](frontend/public/ci-pipeline.png)
 
 ### Test Output
 
-![Test Output](public/test-output.png)
+![Test Output](frontend/public/test-output.png)
 
 ---
 
