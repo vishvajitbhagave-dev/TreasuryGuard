@@ -104,44 +104,15 @@ All contracts are deployed on **Stellar Testnet**. Addresses are auto-loaded fro
 
 ### Mobile Responsive UI
 
-<!-- TODO: Capture screenshot of mobile layout.
-     Steps:
-       1. Open the app in Chrome
-       2. Press F12 → open DevTools
-       3. Click the device toggle icon (top-left of DevTools, looks like a phone/tablet)
-       4. Select "iPhone 14 Pro" (393×852) or "Pixel 7" (412×915) from the device dropdown
-       5. Refresh the page — the layout should stack vertically
-       6. Screenshot the full page showing stacked cards and mobile-friendly navigation
-       7. Save as public/mobile-responsive.png and uncomment the line below
--->
-<!-- ![Mobile Responsive](public/mobile-responsive.png) -->
+![Mobile Responsive](public/mobile-responsive.png)
 
 ### CI/CD Pipeline (GitHub Actions)
 
-<!-- TODO: Capture screenshot of a passing CI run.
-     Steps:
-       1. Push code to GitHub (already done)
-       2. Go to https://github.com/vishvajitbhagave-dev/TreasuryGuard/actions
-       3. Click on the most recent workflow run (should show green checkmarks)
-       4. Screenshot the full page showing both jobs passing:
-          - "Smart Contracts" (Rust build + cargo test) — green ✓
-          - "Frontend" (npm lint + npm test + npm build) — green ✓
-       5. Save as public/ci-pipeline.png and uncomment the line below
--->
-<!-- ![CI/CD Pipeline](public/ci-pipeline.png) -->
+![CI/CD Pipeline](public/ci-pipeline.png)
 
 ### Test Output
 
-<!-- TODO: Capture screenshot of passing tests.
-     Run this command in the frontend/ directory:
-       cd frontend && npm run test
-     The output should show 11 passing tests. Screenshot the terminal output.
-     Then run in the project root:
-       cargo test --manifest-path contracts/Cargo.toml
-     The output should show 3 passing tests. Screenshot that too.
-     Save as public/test-output.png and uncomment the line below
--->
-<!-- ![Test Output](public/test-output.png) -->
+![Test Output](public/test-output.png)
 
 ---
 

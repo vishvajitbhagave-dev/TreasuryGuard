@@ -37,6 +37,7 @@ import {
   fetchContractEvents
 } from "./stellar";
 import { WALLET_PROVIDERS, WalletProviderId } from "./wallet-adapters";
+import FeedbackWidget from "./feedback";
 
 const isValidStellarAddress = (addr: string) => {
   return /^[G][A-D][A-Z2-7]{54}$/.test(addr);
@@ -68,7 +69,8 @@ export default function Home() {
   });
 
   // Action status / Notifications
-  const [notification, setNotification] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
+  const [notification, setNotification] = useState<{ type: "success" | "error" | "info"; message: string; txHash?: string; txStatus?: "pending" | "success" | "failed" } | null>(null);
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(true);
   
   // Forms State
   const [depositAmount, setDepositAmount] = useState<string>("");
@@ -88,11 +90,25 @@ export default function Home() {
   const [showWalletSelector, setShowWalletSelector] = useState<boolean>(false);
 
   // Flash Notification helper
-  const triggerNotification = (type: "success" | "error" | "info", message: string) => {
-    setNotification({ type, message });
+  const triggerNotification = (type: "success" | "error" | "info", message: string, tx?: { txHash?: string; txStatus?: "pending" | "success" | "failed" }) => {
+    setNotification({ type, message, ...tx });
     setTimeout(() => {
       setNotification(null);
-    }, 5000);
+    }, tx ? 10000 : 5000);
+  };
+
+  // Tracks a real network transaction: PENDING on submit, then SUCCESS/FAILED with an explorer link
+  const trackTransaction = async (label: string, run: () => Promise<string>): Promise<string | null> => {
+    triggerNotification("info", `${label} submitted. Waiting for confirmation...`, { txStatus: "pending" });
+    try {
+      const txHash = await run();
+      triggerNotification("success", `${label} confirmed!`, { txHash, txStatus: "success" });
+      return txHash;
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      triggerNotification("error", `${label} failed: ${errorMsg}`, { txStatus: "failed" });
+      return null;
+    }
   };
 
   // Helper to format addresses or names
@@ -158,8 +174,9 @@ export default function Home() {
   }, [networkMode, wallet.address]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      syncState();
+    const timer = setTimeout(async () => {
+      await syncState();
+      setIsInitialLoading(false);
     }, 0);
     return () => clearTimeout(timer);
   }, [syncState]);
@@ -305,8 +322,8 @@ export default function Home() {
     }
     setLoadingAction("establish_trustline");
     try {
-      const txHash = await establishTrustline(wallet.address, wallet.walletProvider as WalletProviderId || "freighter");
-      triggerNotification("success", `Trustline established! Tx Hash: ${txHash.substring(0, 12)}...`);
+      const txHash = await trackTransaction("Trustline", () => establishTrustline(wallet.address!, wallet.walletProvider as WalletProviderId || "freighter"));
+      if (!txHash) return;
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       triggerNotification("error", errorMsg);
@@ -388,8 +405,8 @@ export default function Home() {
           setLoadingAction(null);
           return;
         }
-        const txHash = await sendXlmTransaction(wallet.address, recipientXlm, amountXlm, wallet.walletProvider as WalletProviderId || "freighter");
-        triggerNotification("success", `Payment Sent! Hash: ${txHash.substring(0, 16)}...`);
+        const txHash = await trackTransaction("Payment", () => sendXlmTransaction(wallet.address!, recipientXlm, amountXlm, wallet.walletProvider as WalletProviderId || "freighter"));
+        if (!txHash) return;
         setRecipientXlm("");
         setAmountXlm("");
         syncState();
@@ -443,8 +460,8 @@ export default function Home() {
         setDepositAmount("");
         triggerNotification("success", `Deposited ${amount} USDC into the vault!`);
       } else {
-        const txHash = await depositToVault(CONTRACTS.vaultId, amount, wallet.address!, wallet.walletProvider as WalletProviderId || "freighter");
-        triggerNotification("success", `Deposit successful! Tx Hash: ${txHash.substring(0, 12)}...`);
+        const txHash = await trackTransaction("Deposit", () => depositToVault(CONTRACTS.vaultId, amount, wallet.address!, wallet.walletProvider as WalletProviderId || "freighter"));
+        if (!txHash) return;
         setDepositAmount("");
         syncState();
       }
@@ -552,8 +569,8 @@ export default function Home() {
           setLoadingAction(null);
           return;
         }
-        const txHash = await approveRequestInVault(CONTRACTS.vaultId, wallet.address, id, wallet.walletProvider as WalletProviderId || "freighter");
-        triggerNotification("success", `Request #${id} approved! Tx Hash: ${txHash.substring(0, 12)}...`);
+        const txHash = await trackTransaction(`Request #${id} approval`, () => approveRequestInVault(CONTRACTS.vaultId, wallet.address!, id, wallet.walletProvider as WalletProviderId || "freighter"));
+        if (!txHash) return;
         syncState();
       }
     } catch (err: unknown) {
@@ -590,8 +607,8 @@ export default function Home() {
           setLoadingAction(null);
           return;
         }
-        const txHash = await executeRequestInVault(CONTRACTS.vaultId, wallet.address, id, wallet.walletProvider as WalletProviderId || "freighter");
-        triggerNotification("success", `Request #${id} executed! Tx Hash: ${txHash.substring(0, 12)}...`);
+        const txHash = await trackTransaction(`Request #${id} execution`, () => executeRequestInVault(CONTRACTS.vaultId, wallet.address!, id, wallet.walletProvider as WalletProviderId || "freighter"));
+        if (!txHash) return;
         syncState();
       }
     } catch (err: unknown) {
@@ -616,8 +633,8 @@ export default function Home() {
           setLoadingAction(null);
           return;
         }
-        const txHash = await cancelRequestInVault(CONTRACTS.vaultId, wallet.address, id, wallet.walletProvider as WalletProviderId || "freighter");
-        triggerNotification("success", `Request #${id} cancelled! Tx Hash: ${txHash.substring(0, 12)}...`);
+        const txHash = await trackTransaction(`Request #${id} cancellation`, () => cancelRequestInVault(CONTRACTS.vaultId, wallet.address!, id, wallet.walletProvider as WalletProviderId || "freighter"));
+        if (!txHash) return;
         syncState();
       }
     } catch (err: unknown) {
@@ -809,6 +826,27 @@ export default function Home() {
             )}
           </svg>
           <span className="text-xs font-medium">{notification.message}</span>
+          {notification.txStatus && (
+            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full flex-shrink-0 ${
+              notification.txStatus === "pending"
+                ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse"
+                : notification.txStatus === "success"
+                ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                : "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+            }`}>
+              {notification.txStatus}
+            </span>
+          )}
+          {notification.txHash && (
+            <a
+              href={`https://stellar.expert/explorer/testnet/tx/${notification.txHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-mono underline underline-offset-2 hover:opacity-80 flex-shrink-0"
+            >
+              {notification.txHash.substring(0, 12)}... ↗
+            </a>
+          )}
         </div>
       )}
 
@@ -842,9 +880,20 @@ export default function Home() {
       )}
 
       {/* 3. Stat Dashboard Grid */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {/* Stat 1: Vault Balance */}
-        <div className="glass-panel rounded-xl p-5 relative overflow-hidden flex flex-col justify-between">
+      {isInitialLoading ? (
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="glass-panel rounded-xl p-5 relative overflow-hidden flex flex-col justify-between">
+              <div className="skeleton skeleton-text mb-3"></div>
+              <div className="skeleton skeleton-heading mb-2"></div>
+              <div className="skeleton skeleton-text" style={{ width: '80%' }}></div>
+            </div>
+          ))}
+        </section>
+      ) : (
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {/* Stat 1: Vault Balance */}
+          <div className="glass-panel rounded-xl p-5 relative overflow-hidden flex flex-col justify-between">
           <div className="absolute top-4 right-4 text-cyan-500/20">
             <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -918,6 +967,7 @@ export default function Home() {
           </div>
         </div>
       </section>
+      )}
 
       {/* 4. Main content division */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -1408,6 +1458,9 @@ export default function Home() {
         </div>
 
       </footer>
+
+      {/* User Feedback Widget */}
+      <FeedbackWidget walletAddress={wallet.address} networkMode={networkMode} />
 
     </div>
   );
