@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { 
   VaultConfig, 
   SpendingRequest, 
   ActivityLog, 
   Comment,
   VaultRules,
+  ContributionPlan,
   NetworkMode, 
   WalletState 
 } from "./types";
@@ -21,6 +22,9 @@ import {
   simulatedAddMember,
   simulatedAddComment,
   simulatedSetMonthlyTarget,
+  simulatedSetPlan,
+  simulatedRunDueContributions,
+  simulatedSetCategoryCap,
   currentPeriod,
   resetSimulation,
   SIM_ACCOUNTS,
@@ -45,6 +49,11 @@ import {
   fetchRules,
   fetchContribution,
   setRulesInVault,
+  setContributionPlanInVault,
+  cancelContributionPlanInVault,
+  fetchContributionPlan,
+  runDueContributionsInVault,
+  approveTokenAllowance,
   establishTrustline,
   fetchVaultBalance,
   fetchContractRequests,
@@ -135,9 +144,15 @@ export default function Home() {
       address: address || "",
     };
   });
-  const [rules, setRules] = useState<VaultRules>({ maxRequestAmount: "0", blockedCategories: [], monthlyTarget: "0" });
+  const [rules, setRules] = useState<VaultRules>({ maxRequestAmount: "0", blockedCategories: [], monthlyTarget: "0", categoryCaps: {} });
   const [contributions, setContributions] = useState<{ [addr: string]: string }>({});
   const [targetInput, setTargetInput] = useState<string>("");
+  // Recurring contributions (feature: recurring contributions)
+  const [plans, setPlans] = useState<{ [addr: string]: ContributionPlan }>({});
+  const [planInput, setPlanInput] = useState<string>("");
+  // Budget caps per category (feature: budget caps)
+  const [capCategory, setCapCategory] = useState<string>("Operations");
+  const [capAmount, setCapAmount] = useState<string>("");
   const [expandedDiscussion, setExpandedDiscussion] = useState<number | null>(null);
   const [commentsMap, setCommentsMap] = useState<{ [id: number]: Comment[] }>({});
   const [commentDraft, setCommentDraft] = useState<string>("");
@@ -211,6 +226,7 @@ export default function Home() {
           ((state.contributions[m] || {})[period] || 0).toString(),
         ])
       ));
+      setPlans(state.plans);
     } else {
       // Testnet Mode: load configs from contract
       try {
@@ -248,13 +264,17 @@ export default function Home() {
             withAdmin.map(async (m) => [m, await fetchContribution(CONTRACTS.vaultId, m, period)] as [string, string])
           );
           setContributions(Object.fromEntries(contributionEntries));
+          const planEntries = await Promise.all(
+            withAdmin.map(async (m) => [m, await fetchContributionPlan(CONTRACTS.vaultId, m)] as [string, ContributionPlan | null])
+          );
+          setPlans(Object.fromEntries(planEntries.filter(([, p]) => p !== null) as Array<[string, ContributionPlan]>));
         } catch (memberErr) {
           console.error("Failed to sync members/contributions:", memberErr);
         }
         try {
           setRules(await fetchRules(CONTRACTS.vaultId));
         } catch {
-          setRules({ maxRequestAmount: "0", blockedCategories: [], monthlyTarget: "0" });
+          setRules({ maxRequestAmount: "0", blockedCategories: [], monthlyTarget: "0", categoryCaps: {} });
         }
         
         if (wallet.address) {
@@ -303,6 +323,58 @@ export default function Home() {
     }, 10000);
     return () => clearInterval(interval);
   }, [networkMode, syncState]);
+
+  // Real-time testnet notifications (feature: notification system): alerts
+  // when another member deposits, approves, executes or submits on-chain,
+  // and when a withdrawal is waiting for this user's action.
+  const seenEventIds = useRef<Set<string>>(new Set());
+  const firstEventLoad = useRef<boolean>(true);
+  const alertedPendingIds = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (networkMode !== "testnet") return;
+    let cancelled = false;
+
+    const checkEvents = async () => {
+      try {
+        // Alerts for new deposits / approvals / executions from others
+        const events = await fetchContractEvents(CONTRACTS.vaultId);
+        if (cancelled) return;
+        if (events.length > 0) {
+          const fresh = events.filter((e) => !seenEventIds.current.has(e.id));
+          fresh.forEach((e) => seenEventIds.current.add(e.id));
+          if (!firstEventLoad.current) {
+            fresh
+              .filter((e) => !wallet.address || e.user !== wallet.address)
+              .forEach((e) => {
+                triggerNotification("info", `On-chain activity: ${getAccountLabel(e.user)} ${e.details || e.type}.`);
+              });
+          }
+          firstEventLoad.current = false;
+        }
+
+        // Alert owner/approvers once per pending withdrawal awaiting action
+        const myRole = wallet.address ? memberRoles[wallet.address] : undefined;
+        if (myRole === "owner" || myRole === "approver") {
+          requests
+            .filter((r) => r.status === 0 && !alertedPendingIds.current.has(r.id))
+            .forEach((r) => {
+              alertedPendingIds.current.add(r.id);
+              triggerNotification("info", `Withdrawal #${r.id} (${parseFloat(r.amount).toLocaleString()} USDC) is waiting for approval.`);
+            });
+        }
+      } catch {
+        /* polling errors are already surfaced by syncState */
+      }
+    };
+
+    checkEvents();
+    const interval = setInterval(checkEvents, 10000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [networkMode, wallet.address, memberRoles, requests]);
 
   // Background Simulator Engine for Simulation Mode (Level 3 Event Streaming & Real-Time simulation)
   useEffect(() => {
@@ -882,9 +954,146 @@ export default function Home() {
           return;
         }
         const latestRules = await fetchRules(CONTRACTS.vaultId);
-        const txHash = await trackTransaction("Set monthly target", () => setRulesInVault(CONTRACTS.vaultId, wallet.address!, latestRules.maxRequestAmount, latestRules.blockedCategories, amount.toString(), wallet.walletProvider as WalletProviderId || "freighter"));
+        const txHash = await trackTransaction("Set monthly target", () => setRulesInVault(CONTRACTS.vaultId, wallet.address!, latestRules.maxRequestAmount, latestRules.blockedCategories, amount.toString(), latestRules.categoryCaps, wallet.walletProvider as WalletProviderId || "freighter"));
         if (!txHash) return;
         setTargetInput("");
+        syncState();
+      }
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      triggerNotification("error", errorMsg);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  // Member registers a recurring monthly contribution plan
+  const handleSetPlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = parseFloat(planInput);
+    if (isNaN(amount) || amount <= 0) {
+      triggerNotification("error", "Invalid Amount: Enter a positive monthly amount in USDC.");
+      return;
+    }
+    setLoadingAction("set_plan");
+    try {
+      if (networkMode === "simulation") {
+        simulatedSetPlan(activeSimUser, amount);
+        syncState();
+        setPlanInput("");
+        triggerNotification("success", `Recurring contribution of ${amount} USDC/month registered.`);
+      } else {
+        if (!wallet.address) {
+          triggerNotification("error", "Please connect a wallet first.");
+          setLoadingAction(null);
+          return;
+        }
+        // Grant the vault an allowance so it can pull the monthly charge.
+        // ~9 months of ledgers stays within entry TTL limits.
+        await trackTransaction("Approve recurring allowance", () =>
+          approveTokenAllowance(
+            CONTRACTS.tokenId,
+            wallet.address!,
+            CONTRACTS.vaultId,
+            (amount * 12 * 10000000).toString(),
+            5_000_000,
+            wallet.walletProvider as WalletProviderId || "freighter"
+          )
+        );
+        const txHash = await trackTransaction("Set contribution plan", () => setContributionPlanInVault(CONTRACTS.vaultId, wallet.address!, (amount * 10000000).toString(), wallet.walletProvider as WalletProviderId || "freighter"));
+        if (!txHash) return;
+        setPlanInput("");
+        syncState();
+      }
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      triggerNotification("error", errorMsg);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleCancelPlan = async () => {
+    setLoadingAction("cancel_plan");
+    try {
+      if (networkMode === "simulation") {
+        simulatedSetPlan(activeSimUser, null);
+        syncState();
+        triggerNotification("info", "Recurring contribution plan cancelled.");
+      } else {
+        if (!wallet.address) {
+          triggerNotification("error", "Please connect a wallet first.");
+          setLoadingAction(null);
+          return;
+        }
+        const txHash = await trackTransaction("Cancel contribution plan", () => cancelContributionPlanInVault(CONTRACTS.vaultId, wallet.address!, wallet.walletProvider as WalletProviderId || "freighter"));
+        if (!txHash) return;
+        syncState();
+      }
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      triggerNotification("error", errorMsg);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  // Anyone may trigger the due recurring charges
+  const handleRunDueContributions = async () => {
+    setLoadingAction("run_due");
+    try {
+      if (networkMode === "simulation") {
+        simulatedRunDueContributions();
+        syncState();
+        triggerNotification("success", "Due recurring contributions processed.");
+      } else {
+        if (!wallet.address) {
+          triggerNotification("error", "Please connect a wallet first.");
+          setLoadingAction(null);
+          return;
+        }
+        const txHash = await trackTransaction("Process due contributions", () => runDueContributionsInVault(CONTRACTS.vaultId, wallet.address!, wallet.walletProvider as WalletProviderId || "freighter"));
+        if (!txHash) return;
+        syncState();
+      }
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      triggerNotification("error", errorMsg);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  // Owner sets a monthly budget cap for one category
+  const handleSetCategoryCap = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!capCategory.trim()) {
+      triggerNotification("error", "Enter a category name for the budget cap.");
+      return;
+    }
+    const cap = parseFloat(capAmount);
+    if (isNaN(cap) || cap < 0) {
+      triggerNotification("error", "Invalid Amount: Enter a non-negative cap in USDC.");
+      return;
+    }
+    setLoadingAction("set_cap");
+    try {
+      if (networkMode === "simulation") {
+        simulatedSetCategoryCap(activeSimUser, capCategory.trim(), cap);
+        syncState();
+        setCapAmount("");
+        triggerNotification("success", `Budget cap for ${capCategory.trim()} set to ${cap} USDC/month.`);
+      } else {
+        if (!wallet.address) {
+          triggerNotification("error", "Please connect a wallet first.");
+          setLoadingAction(null);
+          return;
+        }
+        const latestRules = await fetchRules(CONTRACTS.vaultId);
+        const nextCaps = { ...latestRules.categoryCaps, [capCategory.trim()]: (cap * 10000000).toString() };
+        const txHash = await trackTransaction("Set category cap", () => setRulesInVault(CONTRACTS.vaultId, wallet.address!, latestRules.maxRequestAmount, latestRules.blockedCategories, latestRules.monthlyTarget, nextCaps, wallet.walletProvider as WalletProviderId || "freighter"));
+        if (!txHash) return;
+        setCapAmount("");
         syncState();
       }
     } catch (err: unknown) {
@@ -1817,6 +2026,152 @@ export default function Home() {
                   {loadingAction === "set_target" ? "..." : "Set Target"}
                 </button>
               </form>
+            )}
+          </div>
+
+          {/* Card: Recurring Contributions + Category Budget Caps */}
+          <div className="glass-panel rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
+              <svg className="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h5M20 20v-5h-5M9 20H4v-5m11 5h5v-5" />
+              </svg>
+              Recurring Contributions
+            </h3>
+            <p className="text-[10px] text-slate-500 font-medium mb-3">
+              Members pre-authorize a monthly USDC charge; anyone can process due plans.
+            </p>
+
+            <div className="flex flex-col gap-1.5 max-h-32 overflow-y-auto pr-1 mb-3">
+              {[...members.filter((m) => plans[m])].length === 0 && (
+                <p className="text-[11px] text-slate-500">No recurring plans registered yet.</p>
+              )}
+              {members.filter((m) => plans[m]).map((m) => {
+                const p = plans[m];
+                const period = currentPeriod();
+                const isDue = p.active && p.lastPeriod < period;
+                return (
+                  <div key={m} className="flex items-center justify-between text-[11px] border-b border-slate-900/60 pb-1.5 gap-2">
+                    <span className="font-mono text-slate-200 truncate mr-auto">{getAccountLabel(m)}</span>
+                    <span className="font-mono text-slate-300 flex-shrink-0">{parseFloat(p.amount).toLocaleString()} USDC/mo</span>
+                    {!p.active ? (
+                      <span className="text-[9px] uppercase px-1.5 py-0.5 rounded font-bold font-mono bg-slate-800/60 text-slate-400 border border-slate-700/60 flex-shrink-0">Cancelled</span>
+                    ) : isDue ? (
+                      <span className="text-[9px] uppercase px-1.5 py-0.5 rounded font-bold font-mono bg-amber-950/40 text-amber-400 border border-amber-900/50 flex-shrink-0">Due</span>
+                    ) : (
+                      <span className="text-[9px] uppercase px-1.5 py-0.5 rounded font-bold font-mono bg-emerald-950/50 text-emerald-300 border border-emerald-800/60 flex-shrink-0">Charged</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {(() => {
+              const me = networkMode === "simulation" ? activeSimUser : wallet.address;
+              if (!me) return null;
+              const myPlan = plans[me];
+              return myPlan?.active ? (
+                <button
+                  onClick={handleCancelPlan}
+                  disabled={loadingAction === "cancel_plan"}
+                  className="w-full rounded-lg text-[11px] font-semibold bg-slate-800/80 hover:bg-slate-800 disabled:bg-slate-900 disabled:text-slate-500 text-slate-200 transition-all cursor-pointer border border-slate-700/60 py-2"
+                >
+                  {loadingAction === "cancel_plan" ? "..." : "Cancel My Recurring Plan"}
+                </button>
+              ) : (
+                <form onSubmit={handleSetPlan} className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <label htmlFor="plan-input" className="block text-[9px] uppercase font-medium tracking-wider text-slate-400 mb-1.5 font-mono">Monthly Amount (USDC)</label>
+                    <input
+                      id="plan-input"
+                      type="number"
+                      value={planInput}
+                      onChange={(e) => setPlanInput(e.target.value)}
+                      placeholder="e.g. 100"
+                      disabled={loadingAction === "set_plan"}
+                      className="w-full bg-slate-950/60 border border-slate-800/80 text-white rounded-lg py-2 px-3 text-[11px] outline-none focus:border-cyan-500/40 transition-all placeholder-slate-600"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={loadingAction === "set_plan" || planInput === ""}
+                    className="px-3 min-h-[38px] rounded-lg text-[11px] font-semibold bg-cyan-600/80 hover:bg-cyan-600 disabled:bg-slate-800 disabled:text-slate-500 text-white transition-all cursor-pointer border border-cyan-400/10 flex-shrink-0"
+                  >
+                    {loadingAction === "set_plan" ? "..." : "Register Plan"}
+                  </button>
+                </form>
+              );
+            })()}
+
+            <button
+              onClick={handleRunDueContributions}
+              disabled={loadingAction === "run_due"}
+              className="w-full mt-2 rounded-lg text-[11px] font-semibold bg-indigo-600/70 hover:bg-indigo-600 disabled:bg-slate-800 disabled:text-slate-500 text-white transition-all cursor-pointer border border-indigo-400/10 py-2"
+            >
+              {loadingAction === "run_due" ? "Processing..." : "Process Due Contributions"}
+            </button>
+
+            {isOwner && (
+              <>
+                <h4 className="text-xs font-semibold text-white mt-5 pt-3 border-t border-slate-900/60 flex items-center gap-2">
+                  <svg className="w-3.5 h-3.5 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  Category Budget Caps
+                  <span className="text-[9px] uppercase font-normal text-slate-500 font-mono">(monthly, owner)</span>
+                </h4>
+                <p className="text-[10px] text-slate-500 font-medium mt-1 mb-2">
+                  Pending + executed spending per month is capped; cancelled requests free budget.
+                </p>
+
+                {Object.keys(rules.categoryCaps).length > 0 ? (
+                  <div className="flex flex-col gap-1.5 mb-3">
+                    {Object.entries(rules.categoryCaps).map(([cat, cap]) => (
+                      <div key={cat} className="flex items-center justify-between text-[11px] border-b border-slate-900/60 pb-1.5">
+                        <span className="font-mono text-slate-200">{cat}</span>
+                        <span className={`font-mono ${parseFloat(cap) > 0 ? "text-rose-300" : "text-slate-500 line-through"}`}>
+                          {parseFloat(cap) > 0 ? `${parseFloat(cap).toLocaleString()} USDC/mo` : "removed"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-500 mb-3">No category caps configured.</p>
+                )}
+
+                <form onSubmit={handleSetCategoryCap} className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <label htmlFor="cap-category-input" className="block text-[9px] uppercase font-medium tracking-wider text-slate-400 mb-1.5 font-mono">Category</label>
+                    <input
+                      id="cap-category-input"
+                      type="text"
+                      value={capCategory}
+                      onChange={(e) => setCapCategory(e.target.value)}
+                      placeholder="e.g. Repairs"
+                      disabled={loadingAction === "set_cap"}
+                      className="w-full bg-slate-950/60 border border-slate-800/80 text-white rounded-lg py-2 px-3 text-[11px] outline-none focus:border-cyan-500/40 transition-all placeholder-slate-600"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label htmlFor="cap-amount-input" className="block text-[9px] uppercase font-medium tracking-wider text-slate-400 mb-1.5 font-mono">Cap / Month</label>
+                    <input
+                      id="cap-amount-input"
+                      type="number"
+                      value={capAmount}
+                      onChange={(e) => setCapAmount(e.target.value)}
+                      placeholder="0 removes"
+                      disabled={loadingAction === "set_cap"}
+                      className="w-full bg-slate-950/60 border border-slate-800/80 text-white rounded-lg py-2 px-3 text-[11px] outline-none focus:border-cyan-500/40 transition-all placeholder-slate-600"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={loadingAction === "set_cap"}
+                    className="px-3 min-h-[38px] rounded-lg text-[11px] font-semibold bg-rose-600/70 hover:bg-rose-600 disabled:bg-slate-800 disabled:text-slate-500 text-white transition-all cursor-pointer border border-rose-400/10 flex-shrink-0"
+                  >
+                    {loadingAction === "set_cap" ? "..." : "Set Cap"}
+                  </button>
+                </form>
+              </>
             )}
           </div>
 

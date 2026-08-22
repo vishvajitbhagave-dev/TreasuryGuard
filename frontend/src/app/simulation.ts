@@ -1,4 +1,4 @@
-import { VaultConfig, SpendingRequest, ActivityLog, Comment, VaultRules } from "./types";
+import { VaultConfig, SpendingRequest, ActivityLog, Comment, VaultRules, ContributionPlan } from "./types";
 
 export interface SimState {
   config: VaultConfig;
@@ -12,6 +12,7 @@ export interface SimState {
   rules: VaultRules;
   contributions: { [address: string]: { [period: number]: number } };
   requestComments: { [requestId: number]: Comment[] };
+  plans: { [address: string]: ContributionPlan };
 }
 
 // Predefined mock addresses
@@ -146,9 +147,10 @@ const DEFAULT_STATE: SimState = {
     [SIM_ACCOUNTS.CHARLIE]: "3000",
   },
   paused: false,
-  rules: { maxRequestAmount: "0", blockedCategories: [], monthlyTarget: "0" },
+  rules: { maxRequestAmount: "0", blockedCategories: [], monthlyTarget: "0", categoryCaps: {} },
   contributions: {},
   requestComments: {},
+  plans: {},
 };
 
 // Key used to store simulated blockchain state in localStorage
@@ -261,6 +263,77 @@ export const simulatedSetMonthlyTarget = (caller: string, amount: number): SimSt
     type: "set_rules",
     user: caller,
     details: `Set monthly contribution target to ${amount} USDC`,
+  };
+  state.activities = [newActivity, ...state.activities];
+  saveSimulationState(state);
+  return state;
+};
+
+// Member registers/cancels a recurring monthly contribution plan
+export const simulatedSetPlan = (caller: string, amount: number | null): SimState => {
+  const state = getSimulationState();
+  if (amount !== null && amount > 0) {
+    state.plans[caller] = { subscriber: caller, amount: amount.toString(), active: true, lastPeriod: 0 };
+  } else if (state.plans[caller]) {
+    state.plans[caller] = { ...state.plans[caller], active: false };
+  }
+
+  const newActivity: ActivityLog = {
+    id: `a${Date.now()}`,
+    timestamp: Date.now(),
+    type: "set_plan",
+    user: caller,
+    details:
+      amount !== null && amount > 0
+        ? `Registered recurring contribution of ${amount} USDC per month`
+        : "Cancelled recurring contribution plan",
+  };
+  state.activities = [newActivity, ...state.activities];
+  saveSimulationState(state);
+  return state;
+};
+
+// Charges every active plan due for the current month (mirrors contract run_due_contributions)
+export const simulatedRunDueContributions = (): SimState => {
+  const state = getSimulationState();
+  const period = currentPeriod();
+
+  Object.values(state.plans).forEach((plan) => {
+    if (!plan.active || plan.lastPeriod >= period) return;
+    const amount = parseFloat(plan.amount);
+    if ((parseFloat(state.userBalances[plan.subscriber] || "0")) < amount) return;
+
+    state.userBalances[plan.subscriber] = (parseFloat(state.userBalances[plan.subscriber] || "0") - amount).toString();
+    state.balance = (parseFloat(state.balance) + amount).toString();
+    if (!state.contributions[plan.subscriber]) state.contributions[plan.subscriber] = {};
+    state.contributions[plan.subscriber][period] = (state.contributions[plan.subscriber][period] || 0) + amount;
+    state.plans[plan.subscriber] = { ...plan, lastPeriod: period };
+
+    const newActivity: ActivityLog = {
+      id: `a${Date.now()}-${plan.subscriber}`,
+      timestamp: Date.now(),
+      type: "auto_contribution",
+      user: plan.subscriber,
+      details: `Recurring contribution charged: ${amount} USDC`,
+    };
+    state.activities = [newActivity, ...state.activities];
+  });
+
+  saveSimulationState(state);
+  return state;
+};
+
+// Owner sets a monthly budget cap for one category (feature: budget caps)
+export const simulatedSetCategoryCap = (caller: string, category: string, cap: number): SimState => {
+  const state = getSimulationState();
+  state.rules.categoryCaps = { ...state.rules.categoryCaps, [category]: cap.toString() };
+
+  const newActivity: ActivityLog = {
+    id: `a${Date.now()}`,
+    timestamp: Date.now(),
+    type: "set_rules",
+    user: caller,
+    details: cap > 0 ? `Set monthly budget cap for ${category} to ${cap} USDC` : `Removed budget cap for ${category}`,
   };
   state.activities = [newActivity, ...state.activities];
   saveSimulationState(state);

@@ -1,5 +1,5 @@
 import * as StellarSdk from "@stellar/stellar-sdk";
-import { VaultConfig, SpendingRequest, ActivityLog, Comment, VaultRules } from "./types";
+import { VaultConfig, SpendingRequest, ActivityLog, Comment, VaultRules, ContributionPlan } from "./types";
 import { getWalletProvider, WalletProviderId } from "./wallet-adapters";
 
 // Fallback contract constants in case deploy.ps1 hasn't been run or config is missing
@@ -439,13 +439,20 @@ export async function fetchContractComments(vaultId: string, requestId: number):
  * Owner-configurable spending rules incl. the monthly contribution target.
  */
 export async function fetchRules(vaultId: string): Promise<VaultRules> {
-  const defaults: VaultRules = { maxRequestAmount: "0", blockedCategories: [], monthlyTarget: "0" };
+  const defaults: VaultRules = { maxRequestAmount: "0", blockedCategories: [], monthlyTarget: "0", categoryCaps: {} };
   try {
     const r = await invokeReadOnlyMethod(vaultId, "get_rules");
+    const caps: Record<string, string> = {};
+    if (r.category_caps && typeof r.category_caps === "object") {
+      for (const [k, v] of Object.entries(r.category_caps as Record<string, unknown>)) {
+        caps[k] = String(v);
+      }
+    }
     return {
       maxRequestAmount: String(r.max_request_amount ?? defaults.maxRequestAmount),
       blockedCategories: Array.isArray(r.blocked_categories) ? r.blocked_categories.map(String) : [],
       monthlyTarget: String(r.monthly_target ?? defaults.monthlyTarget),
+      categoryCaps: caps,
     };
   } catch (err) {
     console.error("Error fetching rules:", err);
@@ -474,7 +481,8 @@ export async function fetchMemberRole(vaultId: string, member: string): Promise<
 }
 
 /**
- * Rule engine configuration (Owner only), incl. monthly contribution target.
+ * Rule engine configuration (Owner only), incl. monthly contribution target
+ * and per-category budget caps.
  */
 export async function setRulesInVault(
   vaultId: string,
@@ -482,15 +490,101 @@ export async function setRulesInVault(
   maxRequestAmount: string,
   blockedCategories: string[],
   monthlyTarget: string,
+  categoryCaps: Record<string, string> = {},
   providerId: WalletProviderId = "freighter"
 ): Promise<string> {
+  const caps: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(categoryCaps)) {
+    caps[k] = nativeToScValBigInt(v);
+  }
   const args = [
     StellarSdk.nativeToScVal(caller, { type: "address" }),
     StellarSdk.nativeToScVal(BigInt(maxRequestAmount || "0"), { type: "i128" }),
     StellarSdk.nativeToScVal(blockedCategories),
     StellarSdk.nativeToScVal(BigInt(monthlyTarget || "0"), { type: "i128" }),
+    StellarSdk.nativeToScVal(caps),
   ];
   return invokeContractMethod(vaultId, "set_rules", args, caller, providerId);
+}
+
+const nativeToScValBigInt = (v: string): StellarSdk.xdr.ScVal =>
+  StellarSdk.nativeToScVal(BigInt(v || "0"), { type: "i128" });
+
+/**
+ * Recurring contributions (feature: recurring contributions).
+ */
+export async function setContributionPlanInVault(
+  vaultId: string,
+  caller: string,
+  amount: string,
+  providerId: WalletProviderId = "freighter"
+): Promise<string> {
+  const args = [
+    StellarSdk.nativeToScVal(caller, { type: "address" }),
+    nativeToScValBigInt(amount),
+  ];
+  return invokeContractMethod(vaultId, "set_contribution_plan", args, caller, providerId);
+}
+
+export async function cancelContributionPlanInVault(
+  vaultId: string,
+  caller: string,
+  providerId: WalletProviderId = "freighter"
+): Promise<string> {
+  const args = [StellarSdk.nativeToScVal(caller, { type: "address" })];
+  return invokeContractMethod(vaultId, "cancel_contribution_plan", args, caller, providerId);
+}
+
+export async function fetchContributionPlan(
+  vaultId: string,
+  member: string
+): Promise<ContributionPlan | null> {
+  try {
+    const result = await invokeReadOnlyMethod(vaultId, "get_contribution_plan", [
+      StellarSdk.nativeToScVal(member, { type: "address" }),
+    ]);
+    if (!result) return null;
+    const rec = result as Record<string, unknown>;
+    return {
+      subscriber: String(rec.subscriber),
+      amount: String(rec.amount),
+      active: Boolean(rec.active),
+      lastPeriod: Number(rec.last_period ?? 0),
+    };
+  } catch (err) {
+    console.error("Error fetching contribution plan:", err);
+    return null;
+  }
+}
+
+/** Charges all due recurring plans; anyone may call it. Returns tx hash. */
+export async function runDueContributionsInVault(
+  vaultId: string,
+  caller: string,
+  providerId: WalletProviderId = "freighter"
+): Promise<string> {
+  return invokeContractMethod(vaultId, "run_due_contributions", [], caller, providerId);
+}
+
+/**
+ * Grants the vault a token allowance (SAC approve) so recurring monthly
+ * charges can be pulled automatically (feature: recurring contributions).
+ */
+export async function approveTokenAllowance(
+  tokenId: string,
+  from: string,
+  spender: string,
+  amount: string,
+  expirationLedger: number,
+  providerId: WalletProviderId = "freighter"
+): Promise<string> {
+  const args = [
+    StellarSdk.nativeToScVal(from, { type: "address" }),
+    StellarSdk.nativeToScVal(spender, { type: "address" }),
+    StellarSdk.nativeToScVal(BigInt(amount || "0"), { type: "i128" }),
+    StellarSdk.nativeToScVal(expirationLedger, { type: "u32" }),
+  ];
+  return invokeContractMethod(tokenId, "approve", args, from, providerId);
 }
 
 export async function submitRequestToVault(

@@ -32,6 +32,15 @@ export interface VaultRules {
   maxRequestAmount: string; // "0" = no limit
   blockedCategories: string[];
   monthlyTarget: string; // expected per-member contribution per month, "0" = disabled
+  categoryCaps: Record<string, string>; // max pending+executed per category per month, "0" = unlimited
+}
+
+// A member's recurring contribution plan (mirrors contract ContributionPlan)
+export interface ContributionPlan {
+  subscriber: string;
+  amount: string;
+  active: boolean;
+  lastPeriod: number; // UTC year*12+month last charged, 0 = never
 }
 
 export interface ActivityLog {

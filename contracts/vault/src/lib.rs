@@ -27,6 +27,7 @@ pub enum Error {
     VaultPaused = 11,
     RequestNotFound = 12,
     EmptyComment = 13,
+    CategoryBudgetExceeded = 14,
 }
 
 // Member roles: Owner manages rules/members and can do everything,
@@ -71,12 +72,28 @@ pub struct VaultConfig {
 // max_request_amount of 0 means no limit.
 // monthly_target is the expected contribution per member per calendar month
 // (0 disables monthly contribution tracking).
+// category_caps maps a category to the maximum combined pending + executed
+// spending allowed in one calendar month (absent key or 0 = unlimited).
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SpendingRules {
     pub max_request_amount: i128,
     pub blocked_categories: Vec<String>,
     pub monthly_target: i128,
+    pub category_caps: Map<String, i128>,
+}
+
+// A member's recurring contribution plan (feature: recurring contributions).
+// Each calendar month the vault may pull `amount` from the member via the
+// token allowance they granted. last_period records the month last charged
+// so a plan is charged at most once per period.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContributionPlan {
+    pub subscriber: Address,
+    pub amount: i128,
+    pub active: bool,
+    pub last_period: u32,
 }
 
 // Discussion thread entry attached to a spending request (feature: comments).
@@ -121,6 +138,7 @@ pub enum DataKey {
     Paused,        // bool
     Comments(u64), // Vec<Comment> for request id
     Contribution(ContributionKey), // i128 cumulative deposit amount
+    Plan(Address), // ContributionPlan for a member (recurring contributions)
     Request(u64),
     Approved(u64, Address),
     RequestCount,
@@ -275,6 +293,18 @@ impl VaultContract {
             for blocked in rules.blocked_categories.iter() {
                 if blocked == category {
                     return Err(Error::CategoryRestricted);
+                }
+            }
+            // Budget caps per category (feature: budget caps). Pending and
+            // executed requests of the current calendar month count against
+            // the cap; a cap of 0 (or absent) means unlimited.
+            if let Some(cap) = rules.category_caps.get(category.clone()) {
+                if cap > 0 {
+                    let period = month_period(env.ledger().timestamp());
+                    let spent = Self::category_spend_in_period(&env, &category, period);
+                    if spent + amount > cap {
+                        return Err(Error::CategoryBudgetExceeded);
+                    }
                 }
             }
         }
@@ -436,6 +466,7 @@ impl VaultContract {
         max_request_amount: i128,
         blocked_categories: Vec<String>,
         monthly_target: i128,
+        category_caps: Map<String, i128>,
     ) -> Result<(), Error> {
         caller.require_auth();
         Self::require_role(&env, &caller, &[Role::Owner])?;
@@ -444,6 +475,7 @@ impl VaultContract {
             max_request_amount,
             blocked_categories,
             monthly_target,
+            category_caps,
         };
         env.storage().instance().set(&DataKey::Rules, &rules);
         Ok(())
@@ -454,6 +486,7 @@ impl VaultContract {
             max_request_amount: 0,
             blocked_categories: Vec::new(&env),
             monthly_target: 0,
+            category_caps: Map::new(&env),
         })
     }
 
@@ -516,6 +549,141 @@ impl VaultContract {
             .instance()
             .get::<DataKey, i128>(&DataKey::Contribution(key))
             .unwrap_or(0)
+    }
+
+    // Combined pending + executed spending for one category inside a
+    // calendar-month period (feature: budget caps).
+    fn category_spend_in_period(env: &Env, category: &String, period: u32) -> i128 {
+        let count: u64 = env.storage().instance().get(&DataKey::RequestCount).unwrap_or(0);
+        let mut total = 0i128;
+        if count == 0 {
+            return total;
+        }
+        for id in 1..=count {
+            if let Some(request) = env.storage().instance().get::<DataKey, SpendingRequest>(&DataKey::Request(id)) {
+                // Cancelled requests do not consume budget
+                if request.status == 2 {
+                    continue;
+                }
+                if request.category != *category {
+                    continue;
+                }
+                if month_period(request.created_at) != period {
+                    continue;
+                }
+                total += request.amount;
+            }
+        }
+        total
+    }
+
+    // Recurring contributions (feature: recurring contributions).
+    // A member registers a monthly amount; the vault pulls it each month via
+    // the token allowance the member granted to the contract.
+    pub fn set_contribution_plan(env: Env, caller: Address, amount: i128) -> Result<(), Error> {
+        caller.require_auth();
+        Self::require_role(&env, &caller, &[Role::Owner, Role::Contributor])?;
+        if amount <= 0 {
+            return Err(Error::AmountMustBePositive);
+        }
+
+        let plan = ContributionPlan {
+            subscriber: caller.clone(),
+            amount,
+            active: true,
+            // 0 = never charged yet, so the first pull covers the
+            // current month as soon as an allowance is granted.
+            last_period: 0,
+        };
+        env.storage().instance().set(&DataKey::Plan(caller.clone()), &plan);
+
+        env.events().publish(
+            (Symbol::new(&env, "plan_set"), caller),
+            amount,
+        );
+
+        Ok(())
+    }
+
+    pub fn cancel_contribution_plan(env: Env, caller: Address) -> Result<(), Error> {
+        caller.require_auth();
+        Self::require_role(&env, &caller, &[Role::Owner, Role::Contributor])?;
+
+        let key = DataKey::Plan(caller.clone());
+        let mut plan: ContributionPlan = env
+            .storage()
+            .instance()
+            .get(&key)
+            .ok_or(Error::NotAMember)?;
+        plan.active = false;
+        env.storage().instance().set(&key, &plan);
+
+        env.events().publish(
+            (Symbol::new(&env, "plan_cancelled"), caller),
+            (),
+        );
+
+        Ok(())
+    }
+
+    pub fn get_contribution_plan(env: Env, member: Address) -> Option<ContributionPlan> {
+        env.storage().instance().get(&DataKey::Plan(member))
+    }
+
+    // Charges every active plan that is due for the current calendar month.
+    // Callable by anyone so charging does not depend on a member being
+    // online. Members whose allowance or balance cannot cover the charge are
+    // skipped. Returns the number of plans charged.
+    pub fn run_due_contributions(env: Env) -> u32 {
+        let config: VaultConfig = env.storage().instance().get(&DataKey::Config).unwrap();
+        let token_client = token::Client::new(&env, &config.token);
+        let vault = env.current_contract_address();
+        let period = month_period(env.ledger().timestamp());
+
+        let members: Vec<Address> = env.storage().instance().get(&DataKey::Members).unwrap_or_else(|| Vec::new(&env));
+        let mut charged: u32 = 0;
+
+        for member in members.iter() {
+            let key = DataKey::Plan(member.clone());
+            let plan: ContributionPlan = match env.storage().instance().get(&key) {
+                Some(p) => p,
+                None => continue,
+            };
+            if !plan.active || plan.last_period >= period {
+                continue;
+            }
+
+            // Skip members who have not granted (or revoked) enough allowance,
+            // or whose balance cannot cover the charge.
+            if token_client.allowance(&member, &vault) < plan.amount {
+                continue;
+            }
+            if token_client.balance(&member) < plan.amount {
+                continue;
+            }
+
+            token_client.transfer_from(&vault, &member, &vault, &plan.amount);
+
+            let ckey = ContributionKey { member: member.clone(), period };
+            let current = env.storage().instance().get::<DataKey, i128>(&DataKey::Contribution(ckey.clone())).unwrap_or(0);
+            env.storage().instance().set(&DataKey::Contribution(ckey), &(current + plan.amount));
+
+            let mut updated = plan.clone();
+            updated.last_period = period;
+            env.storage().instance().set(&key, &updated);
+
+            let registry_client = RegistryClient::new(&env, &config.registry);
+            registry_client.log_activity(&member, &Symbol::new(&env, "auto_contribution"));
+
+            env.events().publish(
+                (Symbol::new(&env, "auto_contribution"), member),
+                plan.amount,
+            );
+
+            charged += 1;
+        }
+
+        charged
     }
 
     // Emergency pause (Owner only). While paused, withdrawals cannot execute;
@@ -890,11 +1058,12 @@ mod test {
         // Non-owner cannot configure rules
         let mut blocked = Vec::new(&env);
         blocked.push_back(str(&env, "Marketing"));
-        let res = vault_client.try_set_rules(&contributor, &1000i128, &blocked, &0i128);
+        let no_caps = Map::new(&env);
+        let res = vault_client.try_set_rules(&contributor, &1000i128, &blocked, &0i128, &no_caps);
         assert!(res.is_err());
 
         // Owner sets a per-request limit and a restricted category
-        vault_client.set_rules(&admin, &1000i128, &blocked, &0i128);
+        vault_client.set_rules(&admin, &1000i128, &blocked, &0i128, &no_caps);
         let rules = vault_client.get_rules();
         assert_eq!(rules.max_request_amount, 1000i128);
         assert_eq!(rules.blocked_categories.len(), 1);
@@ -1136,7 +1305,8 @@ mod test {
 
         // Owner sets a monthly contribution target of 100
         let no_blocked: Vec<String> = Vec::new(&env);
-        vault_client.set_rules(&admin, &0i128, &no_blocked, &100i128);
+        let no_caps = Map::new(&env);
+        vault_client.set_rules(&admin, &0i128, &no_blocked, &100i128, &no_caps);
         assert_eq!(vault_client.get_rules().monthly_target, 100i128);
 
         // Both contribute in the same month (Nov 2023)
@@ -1162,5 +1332,198 @@ mod test {
 
         // Members who never deposited read as zero
         assert_eq!(vault_client.get_contribution(&admin, &period_dec), 0i128);
+    }
+
+    #[test]
+    fn test_category_budget_caps() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let contributor = Address::generate(&env);
+        let recipient = Address::generate(&env);
+
+        let registry_address = Address::generate(&env);
+        env.register_contract(&registry_address, MockRegistry);
+
+        let token_admin = Address::generate(&env);
+        let token_id = env.register_stellar_asset_contract(token_admin.clone());
+        token::StellarAssetClient::new(&env, &token_id).mint(&contributor, &10_000i128);
+
+        let vault_address = Address::generate(&env);
+        env.register_contract(&vault_address, VaultContract);
+        let vault_client = VaultContractClient::new(&env, &vault_address);
+
+        let mut members = Vec::new(&env);
+        members.push_back(contributor.clone());
+        let mut roles = Vec::new(&env);
+        roles.push_back(str(&env, "contributor"));
+
+        vault_client.initialize(
+            &admin,
+            &token_id,
+            &registry_address,
+            &1u32,
+            &members,
+            &roles,
+            &str(&env, "Team Treasury"),
+            &str(&env, "Purpose"),
+        );
+
+        // Owner caps "Repairs" at 300 per calendar month
+        let mut caps = Map::new(&env);
+        caps.set(str(&env, "Repairs"), 300i128);
+        let no_blocked: Vec<String> = Vec::new(&env);
+        vault_client.set_rules(&admin, &0i128, &no_blocked, &0i128, &caps);
+
+        // First request within the cap succeeds
+        vault_client.submit_request(
+            &contributor,
+            &recipient,
+            &250i128,
+            &str(&env, "Repairs"),
+            &str(&env, "Fix gate"),
+            &str(&env, ""),
+        );
+
+        // A second request would exceed the monthly cap (250 + 100 > 300)
+        let res = vault_client.try_submit_request(
+            &contributor,
+            &recipient,
+            &100i128,
+            &str(&env, "Repairs"),
+            &str(&env, "Over cap"),
+            &str(&env, ""),
+        );
+        assert!(res.is_err());
+
+        // Exactly hitting the cap is still allowed (250 + 50 = 300)
+        vault_client.submit_request(
+            &contributor,
+            &recipient,
+            &50i128,
+            &str(&env, "Repairs"),
+            &str(&env, "Top-up within cap"),
+            &str(&env, ""),
+        );
+
+        // Other categories are unaffected by the Repairs cap
+        vault_client.submit_request(
+            &contributor,
+            &recipient,
+            &500i128,
+            &str(&env, "Events"),
+            &str(&env, "Festival budget"),
+            &str(&env, ""),
+        );
+
+        // Cancelling a pending request frees its share of the budget
+        vault_client.cancel_request(&contributor, &1);
+        vault_client.submit_request(
+            &contributor,
+            &recipient,
+            &100i128,
+            &str(&env, "Repairs"),
+            &str(&env, "Fits after cancel"),
+            &str(&env, ""),
+        );
+
+        // Next calendar month starts with a fresh budget
+        env.ledger().with_mut(|li| li.timestamp = 1_700_000_000 + 31 * 86_400);
+        vault_client.submit_request(
+            &contributor,
+            &recipient,
+            &300i128,
+            &str(&env, "Repairs"),
+            &str(&env, "New month"),
+            &str(&env, ""),
+        );
+    }
+
+    #[test]
+    fn test_recurring_contributions() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let contributor = Address::generate(&env);
+        let outsider = Address::generate(&env);
+
+        let registry_address = Address::generate(&env);
+        env.register_contract(&registry_address, MockRegistry);
+
+        let token_admin = Address::generate(&env);
+        let token_id = env.register_stellar_asset_contract(token_admin.clone());
+        let token_info_client = soroban_sdk::token::Client::new(&env, &token_id);
+
+        let vault_address = Address::generate(&env);
+        env.register_contract(&vault_address, VaultContract);
+        let vault_client = VaultContractClient::new(&env, &vault_address);
+
+        let mut members = Vec::new(&env);
+        members.push_back(contributor.clone());
+        let mut roles = Vec::new(&env);
+        roles.push_back(str(&env, "contributor"));
+
+        vault_client.initialize(
+            &admin,
+            &token_id,
+            &registry_address,
+            &1u32,
+            &members,
+            &roles,
+            &str(&env, "Team Treasury"),
+            &str(&env, "Purpose"),
+        );
+
+        // Contributor funds their wallet and registers a 50/month plan
+        soroban_sdk::token::StellarAssetClient::new(&env, &token_id).mint(&contributor, &500i128);
+        vault_client.set_contribution_plan(&contributor, &50i128);
+        let plan = vault_client.get_contribution_plan(&contributor).unwrap();
+        assert_eq!(plan.amount, 50i128);
+        assert!(plan.active);
+
+        // Outsiders cannot register a plan
+        let res = vault_client.try_set_contribution_plan(&outsider, &50i128);
+        assert!(res.is_err());
+
+        // Without an allowance nothing can be pulled
+        assert_eq!(vault_client.run_due_contributions(), 0u32);
+        assert_eq!(vault_client.get_vault_balance(), 0i128);
+
+        // Contributor grants the vault a 2-month allowance (120 covers 50+50)
+        let period_now = month_period(env.ledger().timestamp());
+        token_info_client.approve(
+            &contributor,
+            &vault_address,
+            &120i128,
+            &(env.ledger().sequence() + 100_000),
+        );
+
+        // The due pull charges the plan once and records it like a deposit
+        assert_eq!(vault_client.run_due_contributions(), 1u32);
+        assert_eq!(vault_client.get_vault_balance(), 50i128);
+        assert_eq!(vault_client.get_contribution(&contributor, &period_now), 50i128);
+        assert_eq!(token_info_client.allowance(&contributor, &vault_address), 70i128);
+
+        // Running again in the same month must not double-charge
+        assert_eq!(vault_client.run_due_contributions(), 0u32);
+        assert_eq!(vault_client.get_vault_balance(), 50i128);
+
+        // Next month the plan is charged again automatically
+        let ts = env.ledger().timestamp();
+        env.ledger().with_mut(|li| li.timestamp = ts + 31 * 86_400);
+        let period_next = month_period(env.ledger().timestamp());
+        assert_ne!(period_next, period_now);
+        assert_eq!(vault_client.run_due_contributions(), 1u32);
+        assert_eq!(vault_client.get_vault_balance(), 100i128);
+        assert_eq!(vault_client.get_contribution(&contributor, &period_next), 50i128);
+
+        // Cancelling stops future charges even with allowance left
+        vault_client.cancel_contribution_plan(&contributor);
+        let ts2 = env.ledger().timestamp();
+        env.ledger().with_mut(|li| li.timestamp = ts2 + 31 * 86_400);
+        assert_eq!(vault_client.run_due_contributions(), 0u32);
+        assert_eq!(vault_client.get_vault_balance(), 100i128);
     }
 }

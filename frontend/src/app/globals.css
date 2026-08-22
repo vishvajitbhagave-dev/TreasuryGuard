@@ -115,6 +115,24 @@ body::before {
   height: 5px;
 }
 
+/* Mobile-friendly UI (feature: mobile-friendly): comfortable touch targets,
+   no iOS focus-zoom on small inputs, and safe long-string wrapping */
+@media (max-width: 640px) {
+  button {
+    min-height: 40px;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+body {
+  overflow-wrap: break-word;
+}
+
 ::-webkit-scrollbar-track {
   background: #070a13;
 }
