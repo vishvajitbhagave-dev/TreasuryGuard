@@ -125,6 +125,9 @@
                 },
                 {
                   "string": "Repair roof"
+                },
+                {
+                  "string": ""
                 }
               ]
             }
@@ -207,6 +210,9 @@
                 },
                 {
                   "string": "While paused"
+                },
+                {
+                  "string": ""
                 }
               ]
             }
@@ -874,6 +880,41 @@
                         "key": {
                           "vec": [
                             {
+                              "symbol": "Contribution"
+                            },
+                            {
+                              "map": [
+                                {
+                                  "key": {
+                                    "symbol": "member"
+                                  },
+                                  "val": {
+                                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                                  }
+                                },
+                                {
+                                  "key": {
+                                    "symbol": "period"
+                                  },
+                                  "val": {
+                                    "u32": 23640
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        "val": {
+                          "i128": {
+                            "hi": 0,
+                            "lo": 500
+                          }
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
                               "symbol": "Members"
                             }
                           ]
@@ -972,6 +1013,14 @@
                             },
                             {
                               "key": {
+                                "symbol": "receipt_url"
+                              },
+                              "val": {
+                                "string": ""
+                              }
+                            },
+                            {
+                              "key": {
                                 "symbol": "recipient"
                               },
                               "val": {
@@ -1059,6 +1108,14 @@
                               },
                               "val": {
                                 "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "receipt_url"
+                              },
+                              "val": {
+                                "string": ""
                               }
                             },
                             {
@@ -2186,6 +2243,9 @@
                 },
                 {
                   "string": "Repair roof"
+                },
+                {
+                  "string": ""
                 }
               ]
             }
@@ -3006,6 +3066,9 @@
                 },
                 {
                   "string": "While paused"
+                },
+                {
+                  "string": ""
                 }
               ]
             }
@@ -3890,6 +3953,14 @@
                   },
                   "val": {
                     "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "receipt_url"
+                  },
+                  "val": {
+                    "string": ""
                   }
                 },
                 {

@@ -74,6 +74,12 @@
                       "string": "Marketing"
                     }
                   ]
+                },
+                {
+                  "i128": {
+                    "hi": 0,
+                    "lo": 0
+                  }
                 }
               ]
             }
@@ -109,6 +115,9 @@
                 },
                 {
                   "string": "Within limit"
+                },
+                {
+                  "string": ""
                 }
               ]
             }
@@ -496,6 +505,14 @@
                             },
                             {
                               "key": {
+                                "symbol": "receipt_url"
+                              },
+                              "val": {
+                                "string": ""
+                              }
+                            },
+                            {
+                              "key": {
                                 "symbol": "recipient"
                               },
                               "val": {
@@ -592,6 +609,17 @@
                                 "i128": {
                                   "hi": 0,
                                   "lo": 1000
+                                }
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "monthly_target"
+                              },
+                              "val": {
+                                "i128": {
+                                  "hi": 0,
+                                  "lo": 0
                                 }
                               }
                             }
@@ -1208,6 +1236,12 @@
                       "string": "Marketing"
                     }
                   ]
+                },
+                {
+                  "i128": {
+                    "hi": 0,
+                    "lo": 0
+                  }
                 }
               ]
             }
@@ -1308,6 +1342,12 @@
                           "string": "Marketing"
                         }
                       ]
+                    },
+                    {
+                      "i128": {
+                        "hi": 0,
+                        "lo": 0
+                      }
                     }
                   ]
                 }
@@ -1353,6 +1393,12 @@
                       "string": "Marketing"
                     }
                   ]
+                },
+                {
+                  "i128": {
+                    "hi": 0,
+                    "lo": 0
+                  }
                 }
               ]
             }
@@ -1445,6 +1491,17 @@
                       "lo": 1000
                     }
                   }
+                },
+                {
+                  "key": {
+                    "symbol": "monthly_target"
+                  },
+                  "val": {
+                    "i128": {
+                      "hi": 0,
+                      "lo": 0
+                    }
+                  }
                 }
               ]
             }
@@ -1490,6 +1547,9 @@
                 },
                 {
                   "string": "Within limit"
+                },
+                {
+                  "string": ""
                 }
               ]
             }
@@ -1658,6 +1718,9 @@
                 },
                 {
                   "string": "Over limit"
+                },
+                {
+                  "string": ""
                 }
               ]
             }
@@ -1760,6 +1823,9 @@
                     },
                     {
                       "string": "Over limit"
+                    },
+                    {
+                      "string": ""
                     }
                   ]
                 }
@@ -1807,6 +1873,9 @@
                 },
                 {
                   "string": "Blocked category"
+                },
+                {
+                  "string": ""
                 }
               ]
             }
@@ -1909,6 +1978,9 @@
                     },
                     {
                       "string": "Blocked category"
+                    },
+                    {
+                      "string": ""
                     }
                   ]
                 }

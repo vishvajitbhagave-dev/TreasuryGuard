@@ -88,11 +88,15 @@ All contracts are deployed on **Stellar Testnet**. Addresses are auto-loaded fro
 
 | Contract | Address |
 | :--- | :--- |
-| **Vault Core** | `CDCIWHL7F7VO3EVXFENCNWYXOQKVVLZXVLWNPERFMVFZ6TZ3Y34D7GBQ` |
-| **Vault Registry** | `CC5QV5MIM5M2DGUDRSAAWXAZI5PY2SUD5TL474XQAC5HVWTXIZHCNUNN` |
+| **Vault Core** | `CA2XECSGBYBHGGA3ZLFF4ZEAVQLKFLDVWOTHQOQW7SLM6HCZPCIRRLDT` |
+| **Vault Registry** | `CCBG4MKIW6F2OLPR5GEQXJKDAR67GGAECPD5BZIPKUYWLSS6EGLAKIW4` |
 | **SAC Token (USDC)** | `CDT3PKODYDZDCDXJLO3PZ56GARG5SIDCDEEDTU7EBGPW3EITKCOWQOXW` |
 
 > **Admin/Owner address:** `GACYFFEF6TV4MNCRW5LYZ57PO6V3CAVZMGYBEHD4MG6IPYVXENE4XJQO`
+>
+> **WASM hashes:** Vault Core `2b7d88bf170cdb26d9c32ee68ad9bfffb51ad5625c983e053923b3c3b55634f1` · Vault Registry `bd502a6bdf67a9261f6d1f6f49806d50b3e7c34d5c261b0d75f7b77931f6bbcc`
+>
+> This deployment includes the full Community Management feature set: request receipts (`receipt_url`), on-chain discussion comments, per-member monthly contribution tracking with owner-set targets (`monthly_target`), role-based member invitations (`set_member_role`), and CSV report exports.
 
 ---
 
@@ -124,6 +128,11 @@ All transactions below are live on **Stellar Testnet** and verifiable on [Stella
 - [Vault Registry Initialize TX](https://stellar.expert/explorer/testnet/tx/726a1022690fc388cddf226e48c68bfbc336206810a0603588cb404bcca85325) — contract call initializing the Vault Registry admin (Aug 22, 2026)
 - [Vault Registration TX](https://stellar.expert/explorer/testnet/tx/80eea5ce78ab0d5d17d64129037da64a1a2fa73c7fe4919be9e997e09de96804) — inter-contract call: Vault Core registered itself with the Vault Registry on initialization, emitting the `vault_registered` event (Aug 22, 2026)
 - [Emergency Pause TX](https://stellar.expert/explorer/testnet/tx/84e9d5ea7f5b97cbabeeb4a15ad440a2b1504934ea0266bca73dc02480e936ce) — Owner activated the emergency pause (`set_paused`), blocking withdrawals on-chain; followed by a resume transaction restoring normal operation (Aug 22, 2026)
+- [Community Features Redeploy TX](https://stellar.expert/explorer/testnet/tx/e35c6f6d014f5e5ca26bca78b913f6f9663129f8670108eea8413995236b0995) — initialize of the upgraded Vault Core (receipts, comments, contribution tracking) with registry self-registration (`vault_registered` event) (Aug 22, 2026)
+- [Monthly Target TX](https://stellar.expert/explorer/testnet/tx/3ac0dc93fe07d5d9c203dd2e0ff799186ce8eb3bcd71ad40b7cec431f969b97c) — Owner set spending rules including `monthly_target` = 100 USDC; confirmed via `get_rules` (Aug 22, 2026)
+- [Contribution Tracking TX](https://stellar.expert/explorer/testnet/tx/ddea0d358d14fda5edea19bf688587351b2a4a4cc217e14457330f0e0d379ef0) — Owner deposited 100 USDC; `get_contribution(owner, period)` returns the full amount for the current month (Aug 22, 2026)
+- [Request With Receipt TX](https://stellar.expert/explorer/testnet/tx/af6d408146a31e44abc2971eea40db094277f90e166c8bec1482ebacdfc020ea) — request #1 submitted with `receipt_url`; persisted and returned by `get_request` (Aug 22, 2026)
+- [On-chain Comments TX](https://stellar.expert/explorer/testnet/tx/e156fde331d8f94c1c007a417cee3af4aa385793ccab539e85cd1a8795e96100) — two members commented on request #1 via `add_comment` (`comment_added` events); thread readable via `get_comments` ([second member TX](https://stellar.expert/explorer/testnet/tx/d1b776077412852403bd7d01e1643b76a0db14993abe39e32b0e944d82857b60)) (Aug 22, 2026)
 
 ---
 

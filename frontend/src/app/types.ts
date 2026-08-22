@@ -13,10 +13,25 @@ export interface SpendingRequest {
   amount: string; // Keep as string for display of big numbers
   category: string;
   description: string;
+  receiptUrl: string;
   approvalsCount: number;
   status: 0 | 1 | 2; // 0 = Pending, 1 = Executed, 2 = Cancelled
   createdAt: number;
   proposer: string;
+}
+
+// Discussion entry attached to a spending request (on-chain)
+export interface Comment {
+  author: string;
+  text: string;
+  timestamp: number;
+}
+
+// Owner-configurable spending rules (mirrors contract SpendingRules)
+export interface VaultRules {
+  maxRequestAmount: string; // "0" = no limit
+  blockedCategories: string[];
+  monthlyTarget: string; // expected per-member contribution per month, "0" = disabled
 }
 
 export interface ActivityLog {

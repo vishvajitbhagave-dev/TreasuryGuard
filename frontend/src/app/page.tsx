@@ -5,6 +5,8 @@ import {
   VaultConfig, 
   SpendingRequest, 
   ActivityLog, 
+  Comment,
+  VaultRules,
   NetworkMode, 
   WalletState 
 } from "./types";
@@ -15,7 +17,11 @@ import {
   simulatedApproveRequest, 
   simulatedExecuteRequest, 
   simulatedCancelRequest, 
-  simulatedSetPaused, 
+  simulatedSetPaused,
+  simulatedAddMember,
+  simulatedAddComment,
+  simulatedSetMonthlyTarget,
+  currentPeriod,
   resetSimulation,
   SIM_ACCOUNTS,
   SIM_ROLES,
@@ -31,6 +37,14 @@ import {
   cancelRequestInVault,
   setVaultPaused,
   fetchVaultPaused,
+  setMemberRoleInVault,
+  fetchMembers,
+  fetchMemberRole,
+  addCommentToVault,
+  fetchContractComments,
+  fetchRules,
+  fetchContribution,
+  setRulesInVault,
   establishTrustline,
   fetchVaultBalance,
   fetchContractRequests,
@@ -45,6 +59,22 @@ import FeedbackWidget from "./feedback";
 
 const isValidStellarAddress = (addr: string) => {
   return /^[G][A-D][A-Z2-7]{54}$/.test(addr);
+};
+
+// Build a CSV file from rows and trigger a browser download
+const downloadCsv = (filename: string, rows: string[][]) => {
+  const csv = rows
+    .map(row => row.map(cell => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
+    .join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 };
 
 export default function Home() {
@@ -81,6 +111,37 @@ export default function Home() {
   // Forms State
   const [depositAmount, setDepositAmount] = useState<string>("");
   const [paused, setPaused] = useState<boolean>(false);
+  const [members, setMembers] = useState<string[]>([]);
+  const [memberRoles, setMemberRoles] = useState<{ [addr: string]: string }>({});
+  const [newMemberAddress, setNewMemberAddress] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("address") || "";
+  });
+  const [newMemberRole, setNewMemberRole] = useState<string>(() => {
+    if (typeof window === "undefined") return "contributor";
+    const role = new URLSearchParams(window.location.search).get("role") || "";
+    return ["owner", "approver", "contributor", "viewer"].includes(role) ? role : "contributor";
+  });
+  const [inviteLink, setInviteLink] = useState<string>("");
+  const [inviteCopied, setInviteCopied] = useState<boolean>(false);
+  const [inviteRedeem, setInviteRedeem] = useState<{ address: string; role: string } | null>(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const role = params.get("role");
+    const address = params.get("address");
+    if (!role && !address) return null;
+    return {
+      role: role && ["owner", "approver", "contributor", "viewer"].includes(role) ? role : "contributor",
+      address: address || "",
+    };
+  });
+  const [rules, setRules] = useState<VaultRules>({ maxRequestAmount: "0", blockedCategories: [], monthlyTarget: "0" });
+  const [contributions, setContributions] = useState<{ [addr: string]: string }>({});
+  const [targetInput, setTargetInput] = useState<string>("");
+  const [expandedDiscussion, setExpandedDiscussion] = useState<number | null>(null);
+  const [commentsMap, setCommentsMap] = useState<{ [id: number]: Comment[] }>({});
+  const [commentDraft, setCommentDraft] = useState<string>("");
+  const [receiptUrl, setReceiptUrl] = useState<string>("");
   const [newRequest, setNewRequest] = useState({
     recipient: "",
     amount: "",
@@ -140,6 +201,16 @@ export default function Home() {
       setVaultBalance(state.balance);
       setUserBalances(state.userBalances);
       setPaused(state.paused);
+      setRules(state.rules);
+      setMemberRoles({ [SIM_ACCOUNTS.ADMIN]: "owner", ...state.roles });
+      setMembers([SIM_ACCOUNTS.ADMIN, ...state.members]);
+      const period = currentPeriod();
+      setContributions(Object.fromEntries(
+        [SIM_ACCOUNTS.ADMIN, ...state.members].map((m) => [
+          m,
+          ((state.contributions[m] || {})[period] || 0).toString(),
+        ])
+      ));
     } else {
       // Testnet Mode: load configs from contract
       try {
@@ -156,6 +227,34 @@ export default function Home() {
           setPaused(await fetchVaultPaused(CONTRACTS.vaultId));
         } catch {
           setPaused(false);
+        }
+
+        // Members, rules and monthly contributions
+        try {
+          const memberList = await fetchMembers(CONTRACTS.vaultId);
+          const withAdmin = memberList.includes(liveConfig.admin) ? memberList : [liveConfig.admin, ...memberList];
+          setMembers(withAdmin);
+          const roleEntries: Array<[string, string]> = [];
+          for (const m of withAdmin) {
+            try {
+              roleEntries.push([m, await fetchMemberRole(CONTRACTS.vaultId, m)]);
+            } catch {
+              roleEntries.push([m, "-"]);
+            }
+          }
+          setMemberRoles(Object.fromEntries(roleEntries));
+          const period = currentPeriod();
+          const contributionEntries = await Promise.all(
+            withAdmin.map(async (m) => [m, await fetchContribution(CONTRACTS.vaultId, m, period)] as [string, string])
+          );
+          setContributions(Object.fromEntries(contributionEntries));
+        } catch (memberErr) {
+          console.error("Failed to sync members/contributions:", memberErr);
+        }
+        try {
+          setRules(await fetchRules(CONTRACTS.vaultId));
+        } catch {
+          setRules({ maxRequestAmount: "0", blockedCategories: [], monthlyTarget: "0" });
         }
         
         if (wallet.address) {
@@ -539,10 +638,12 @@ export default function Home() {
           newRequest.recipient,
           amountVal,
           newRequest.category,
-          newRequest.description
+          newRequest.description,
+          receiptUrl.trim()
         );
         syncState();
         setNewRequest({ recipient: "", amount: "", category: "Operations", description: "" });
+        setReceiptUrl("");
         triggerNotification("success", "Spending request submitted successfully!");
       } else {
         if (!wallet.address) {
@@ -557,10 +658,12 @@ export default function Home() {
           newRequest.amount,
           newRequest.category,
           newRequest.description,
+          receiptUrl.trim(),
           wallet.walletProvider as WalletProviderId || "freighter"
         );
         triggerNotification("success", `Request submitted! Tx Hash: ${txHash.substring(0, 12)}...`);
         setNewRequest({ recipient: "", amount: "", category: "Operations", description: "" });
+        setReceiptUrl("");
         syncState();
       }
     } catch (err: unknown) {
@@ -704,11 +807,191 @@ export default function Home() {
     }
   };
 
+  // Invite members by wallet address (Owner only)
+  const handleAddMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMemberAddress || !newMemberRole) return;
+    if (!newMemberAddress.startsWith("G") || newMemberAddress.length !== 56) {
+      triggerNotification("error", "Invalid Address: A Stellar wallet address starts with G and is 56 characters long.");
+      return;
+    }
+    setLoadingAction("add_member");
+    try {
+      if (networkMode === "simulation") {
+        simulatedAddMember(activeSimUser, newMemberAddress, newMemberRole);
+        syncState();
+        setNewMemberAddress("");
+        triggerNotification("success", `Member added with role ${newMemberRole}.`);
+      } else {
+        if (!wallet.address) {
+          triggerNotification("error", "Please connect a wallet first.");
+          setLoadingAction(null);
+          return;
+        }
+        const txHash = await trackTransaction(`Add member ${newMemberRole}`, () => setMemberRoleInVault(CONTRACTS.vaultId, wallet.address!, newMemberAddress, newMemberRole, wallet.walletProvider as WalletProviderId || "freighter"));
+        if (!txHash) return;
+        setNewMemberAddress("");
+        syncState();
+      }
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      triggerNotification("error", errorMsg);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  // Generate a shareable invitation link encoding the suggested role
+  const handleGenerateInviteLink = () => {
+    const params = new URLSearchParams({ role: newMemberRole });
+    if (newMemberAddress.startsWith("G")) params.set("address", newMemberAddress);
+    const link = `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+    setInviteLink(link);
+    setInviteCopied(false);
+  };
+
+  const handleCopyInviteLink = async () => {
+    if (!inviteLink) return;
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setInviteCopied(true);
+    } catch {
+      triggerNotification("error", "Could not copy to clipboard.");
+    }
+  };
+
+  // Owner sets the expected monthly contribution target
+  const handleSetMonthlyTarget = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = parseFloat(targetInput);
+    if (isNaN(amount) || amount < 0) {
+      triggerNotification("error", "Invalid Amount: Enter a non-negative monthly target in USDC.");
+      return;
+    }
+    setLoadingAction("set_target");
+    try {
+      if (networkMode === "simulation") {
+        simulatedSetMonthlyTarget(activeSimUser, amount);
+        syncState();
+        setTargetInput("");
+        triggerNotification("success", `Monthly contribution target set to ${amount} USDC.`);
+      } else {
+        if (!wallet.address) {
+          triggerNotification("error", "Please connect a wallet first.");
+          setLoadingAction(null);
+          return;
+        }
+        const latestRules = await fetchRules(CONTRACTS.vaultId);
+        const txHash = await trackTransaction("Set monthly target", () => setRulesInVault(CONTRACTS.vaultId, wallet.address!, latestRules.maxRequestAmount, latestRules.blockedCategories, amount.toString(), wallet.walletProvider as WalletProviderId || "freighter"));
+        if (!txHash) return;
+        setTargetInput("");
+        syncState();
+      }
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      triggerNotification("error", errorMsg);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  // Open/close a request's discussion thread and load its comments
+  const toggleDiscussion = async (requestId: number) => {
+    if (expandedDiscussion === requestId) {
+      setExpandedDiscussion(null);
+      return;
+    }
+    setExpandedDiscussion(requestId);
+    setCommentDraft("");
+    if (networkMode === "simulation") {
+      const state = getSimulationState();
+      setCommentsMap(prev => ({ ...prev, [requestId]: state.requestComments[requestId] || [] }));
+    } else {
+      try {
+        const comments = await fetchContractComments(CONTRACTS.vaultId, requestId);
+        setCommentsMap(prev => ({ ...prev, [requestId]: comments }));
+      } catch (err) {
+        console.error("Failed to load comments:", err);
+        setCommentsMap(prev => ({ ...prev, [requestId]: [] }));
+      }
+    }
+  };
+
+  // Post a comment on a pending request (any member)
+  const handlePostComment = async (requestId: number) => {
+    const text = commentDraft.trim();
+    if (!text) return;
+    setLoadingAction(`comment_${requestId}`);
+    try {
+      if (networkMode === "simulation") {
+        simulatedAddComment(requestId, activeSimUser, text);
+        const state = getSimulationState();
+        setCommentsMap(prev => ({ ...prev, [requestId]: state.requestComments[requestId] || [] }));
+        setCommentDraft("");
+        triggerNotification("success", "Comment posted to the discussion.");
+      } else {
+        if (!wallet.address) {
+          triggerNotification("error", "Please connect a wallet first.");
+          setLoadingAction(null);
+          return;
+        }
+        const txHash = await trackTransaction(`Comment on Request #${requestId}`, () => addCommentToVault(CONTRACTS.vaultId, wallet.address!, requestId, text, wallet.walletProvider as WalletProviderId || "freighter"));
+        if (!txHash) return;
+        setCommentDraft("");
+        const comments = await fetchContractComments(CONTRACTS.vaultId, requestId);
+        setCommentsMap(prev => ({ ...prev, [requestId]: comments }));
+      }
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      triggerNotification("error", errorMsg);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  // Export reports as CSV downloads for audits and accounting
+  const exportRequestsCsv = () => {
+    const rows: string[][] = [
+      ["ID", "Created At", "Proposer", "Recipient", "Amount USDC", "Category", "Status", "Approvals", "Description", "Receipt URL"],
+      ...requests.map(r => [
+        r.id.toString(),
+        new Date(r.createdAt).toISOString(),
+        r.proposer,
+        r.recipient,
+        r.amount,
+        r.category,
+        r.status === 0 ? "Pending" : r.status === 1 ? "Executed" : "Cancelled",
+        r.approvalsCount.toString(),
+        r.description,
+        r.receiptUrl,
+      ]),
+    ];
+    downloadCsv("vaultlink-requests.csv", rows);
+    triggerNotification("success", "Requests report exported as CSV.");
+  };
+
+  const exportActivityCsv = () => {
+    const rows: string[][] = [
+      ["Timestamp", "Type", "User", "Details"],
+      ...activities.map(a => [
+        new Date(a.timestamp).toISOString(),
+        a.type,
+        a.user,
+        a.details || "",
+      ]),
+    ];
+    downloadCsv("vaultlink-activity.csv", rows);
+    triggerNotification("success", "Activity log exported as CSV.");
+  };
+
   // Dashboard balances: Reserved = sum of pending requests, Available = total - reserved
   const reservedBalance = requests
     .filter((r) => r.status === 0)
     .reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
   const availableBalance = Math.max((parseFloat(vaultBalance) || 0) - reservedBalance, 0);
+  const isOwner = networkMode === "simulation"
+    ? activeSimUser === SIM_ACCOUNTS.ADMIN
+    : wallet.address !== null && wallet.address === config.admin;
 
   return (
     <div className="flex-1 w-full max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
@@ -939,6 +1222,36 @@ export default function Home() {
               {notification.txHash.substring(0, 12)}... ↗
             </a>
           )}
+        </div>
+      )}
+
+      {/* Invitation Link Redemption Banner */}
+      {inviteRedeem && (
+        <div className="bg-cyan-950/40 border border-cyan-800/60 rounded-2xl p-4 mb-8 flex flex-wrap items-center gap-3">
+          <span className="text-[10px] uppercase px-2 py-0.5 rounded font-bold font-mono tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">Invitation</span>
+          <p className="text-xs text-slate-200 font-medium">
+            You have been invited to join this vault{inviteRedeem.role ? <> as <span className="text-cyan-300 font-bold capitalize">{inviteRedeem.role}</span></> : null}.
+            {inviteRedeem.address
+              ? <> Invitee address pre-filled for the Owner below.</>
+              : " Share your wallet address with the vault Owner to be added."}
+          </p>
+          {!inviteRedeem.address && (
+            <button
+              onClick={async () => {
+                const addr = networkMode === "testnet" ? (wallet.address || "") : activeSimUser;
+                try { await navigator.clipboard.writeText(addr); triggerNotification("success", "Address copied — send it to the vault Owner."); } catch { triggerNotification("error", "Could not copy address."); }
+              }}
+              className="ml-auto px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-blue-600/20 text-blue-300 border border-blue-500/40 hover:bg-blue-600/40 transition-all cursor-pointer"
+            >
+              Copy My Address
+            </button>
+          )}
+          <button
+            onClick={() => setInviteRedeem(null)}
+            className="px-2 py-1 rounded text-[11px] font-medium text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -1305,6 +1618,19 @@ export default function Home() {
                 />
               </div>
 
+              <div>
+                <label htmlFor="receipt-input" className="block text-[9px] uppercase font-medium tracking-wider text-slate-400 mb-1.5 font-mono">Receipt URL / Reference <span className="normal-case tracking-normal">(optional)</span></label>
+                <input
+                  id="receipt-input"
+                  type="text"
+                  value={receiptUrl}
+                  onChange={(e) => setReceiptUrl(e.target.value)}
+                  placeholder="https://... link to bill or invoice"
+                  disabled={loadingAction === "submit_request"}
+                  className="w-full bg-slate-950/60 border border-slate-800/80 text-white rounded-lg py-2.5 px-3.5 text-xs outline-none focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/25 transition-all placeholder-slate-600"
+                />
+              </div>
+
               <button
                 type="submit"
                 disabled={loadingAction === "submit_request" || !newRequest.recipient || !newRequest.amount || !newRequest.category || !newRequest.description}
@@ -1323,6 +1649,175 @@ export default function Home() {
                 )}
               </button>
             </form>
+          </div>
+
+          {/* Form/Card: Members & Invitations (feature: invite members) */}
+          <div className="glass-panel rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+              <svg className="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              Members ({members.length})
+            </h3>
+
+            <div className="flex flex-col gap-1.5 mb-4 max-h-40 overflow-y-auto pr-1">
+              {members.map((m) => (
+                <div key={m} className="flex items-center justify-between text-[11px] border-b border-slate-900/60 pb-1.5">
+                  <span className="font-mono text-slate-200 truncate mr-2" title={m}>{getAccountLabel(m)}</span>
+                  <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-bold font-mono tracking-wider flex-shrink-0 ${
+                    memberRoles[m] === "owner"
+                      ? "bg-violet-950/50 text-violet-300 border border-violet-800/60"
+                      : memberRoles[m] === "approver"
+                      ? "bg-cyan-950/50 text-cyan-300 border border-cyan-800/60"
+                      : memberRoles[m] === "contributor"
+                      ? "bg-blue-950/40 text-blue-300 border border-blue-800/50"
+                      : "bg-slate-900/60 text-slate-400 border border-slate-800/60"
+                  }`}>
+                    {memberRoles[m] || "member"}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {isOwner && (
+              <>
+                <form onSubmit={handleAddMember} className="flex flex-col gap-3 pt-1">
+                  <div>
+                    <label htmlFor="member-address-input" className="block text-[9px] uppercase font-medium tracking-wider text-slate-400 mb-1.5 font-mono">Invite by Wallet Address</label>
+                    <input
+                      id="member-address-input"
+                      type="text"
+                      value={newMemberAddress}
+                      onChange={(e) => setNewMemberAddress(e.target.value)}
+                      placeholder="G..."
+                      disabled={loadingAction === "add_member"}
+                      className="w-full bg-slate-950/60 border border-slate-800/80 text-white rounded-lg py-2 px-3 text-[11px] font-mono outline-none focus:border-cyan-500/40 transition-all placeholder-slate-600"
+                    />
+                  </div>
+                  <div className="flex gap-2 items-end">
+                    <div className="flex-1">
+                      <label htmlFor="member-role-input" className="block text-[9px] uppercase font-medium tracking-wider text-slate-400 mb-1.5 font-mono">Role</label>
+                      <select
+                        id="member-role-input"
+                        value={newMemberRole}
+                        onChange={(e) => setNewMemberRole(e.target.value)}
+                        disabled={loadingAction === "add_member"}
+                        className="w-full bg-slate-950/60 border border-slate-800/80 text-white rounded-lg py-2 px-2.5 text-[11px] outline-none focus:border-cyan-500/40 transition-all cursor-pointer"
+                      >
+                        <option value="contributor" className="bg-slate-900">Contributor</option>
+                        <option value="approver" className="bg-slate-900">Approver</option>
+                        <option value="viewer" className="bg-slate-900">Viewer</option>
+                        <option value="owner" className="bg-slate-900">Owner</option>
+                      </select>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={loadingAction === "add_member" || !newMemberAddress}
+                      className="px-3 h-[34px] rounded-lg text-[11px] font-semibold bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-500 text-white transition-all cursor-pointer border border-blue-400/10 flex-shrink-0"
+                    >
+                      {loadingAction === "add_member" ? "..." : "Add"}
+                    </button>
+                  </div>
+                </form>
+
+                <div className="mt-4 pt-3 border-t border-slate-900/60">
+                  <button
+                    onClick={handleGenerateInviteLink}
+                    className="text-[10px] font-bold text-cyan-400 hover:text-cyan-300 uppercase font-mono flex items-center gap-1 cursor-pointer"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5M10.172 13.828a4 4 0 010-5.656l3-3a4 4 0 015.656 5.656l-1.5 1.5" />
+                    </svg>
+                    Generate Invitation Link
+                  </button>
+                  {inviteLink && (
+                    <div className="flex gap-2 mt-2">
+                      <input
+                        type="text"
+                        value={inviteLink}
+                        readOnly
+                        className="flex-1 bg-slate-950/60 border border-slate-800/80 text-slate-300 rounded-lg py-1.5 px-2.5 text-[10px] font-mono outline-none"
+                      />
+                      <button
+                        onClick={handleCopyInviteLink}
+                        className="px-2.5 rounded-lg text-[10px] font-semibold bg-slate-900 text-slate-200 border border-slate-800 hover:bg-slate-850 transition-all cursor-pointer flex-shrink-0"
+                      >
+                        {inviteCopied ? "Copied!" : "Copy"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Card: Monthly Contribution Tracking (feature: monthly contributions) */}
+          <div className="glass-panel rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
+              <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              Monthly Contributions
+            </h3>
+            <p className="text-[10px] text-slate-500 font-medium mb-3">
+              Period: <span className="text-slate-300 font-semibold">{new Date().toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" })}</span>
+              {rules.monthlyTarget !== "0" && <> · Target: <span className="text-emerald-400 font-bold">{parseFloat(rules.monthlyTarget).toLocaleString()} USDC</span></>}
+            </p>
+
+            {rules.monthlyTarget === "0" && (
+              <p className="text-[11px] text-amber-400/90 bg-amber-950/30 border border-amber-900/40 rounded-lg px-3 py-2 mb-3">
+                No monthly target set yet{isOwner ? " — set one below to start tracking paid / unpaid members." : "."}
+              </p>
+            )}
+
+            <div className="flex flex-col gap-1.5 max-h-44 overflow-y-auto pr-1">
+              {members.map((m) => {
+                const paid = parseFloat(contributions[m] || "0");
+                const target = parseFloat(rules.monthlyTarget);
+                const hasMet = !isNaN(target) && target > 0 && paid >= target;
+                return (
+                  <div key={m} className="flex items-center justify-between text-[11px] border-b border-slate-900/60 pb-1.5">
+                    <span className="font-mono text-slate-200 truncate mr-2">{getAccountLabel(m)}</span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="font-mono text-slate-300">{paid.toLocaleString()} USDC</span>
+                      {rules.monthlyTarget !== "0" && (
+                        <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded font-bold font-mono tracking-wider ${
+                          hasMet
+                            ? "bg-emerald-950/50 text-emerald-300 border border-emerald-800/60"
+                            : "bg-amber-950/40 text-amber-400 border border-amber-900/50"
+                        }`}>
+                          {hasMet ? "Paid" : "Not paid"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {isOwner && (
+              <form onSubmit={handleSetMonthlyTarget} className="flex gap-2 items-end mt-4 pt-3 border-t border-slate-900/60">
+                <div className="flex-1">
+                  <label htmlFor="target-input" className="block text-[9px] uppercase font-medium tracking-wider text-slate-400 mb-1.5 font-mono">Expected Monthly USDC / Member</label>
+                  <input
+                    id="target-input"
+                    type="number"
+                    value={targetInput}
+                    onChange={(e) => setTargetInput(e.target.value)}
+                    placeholder="e.g. 100"
+                    disabled={loadingAction === "set_target"}
+                    className="w-full bg-slate-950/60 border border-slate-800/80 text-white rounded-lg py-1.5 px-3 text-[11px] outline-none focus:border-cyan-500/40 transition-all placeholder-slate-600"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={loadingAction === "set_target" || targetInput === ""}
+                  className="px-3 h-[32px] rounded-lg text-[11px] font-semibold bg-emerald-600/80 hover:bg-emerald-600 disabled:bg-slate-800 disabled:text-slate-500 text-white transition-all cursor-pointer border border-emerald-400/10 flex-shrink-0"
+                >
+                  {loadingAction === "set_target" ? "..." : "Set Target"}
+                </button>
+              </form>
+            )}
           </div>
 
         </div>
@@ -1369,6 +1864,17 @@ export default function Home() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-bold font-mono text-cyan-400">#{req.id}</span>
                           <span className="text-xs font-medium text-slate-200">{req.description}</span>
+                          {req.receiptUrl && (
+                            <a
+                              href={req.receiptUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={req.receiptUrl}
+                              className="text-[9px] uppercase px-2 py-0.5 rounded font-bold font-mono tracking-wider bg-emerald-950/40 text-emerald-300 border border-emerald-900/50 hover:bg-emerald-900/40 transition-all"
+                            >
+                              Receipt ↗
+                            </a>
+                          )}
                           <span className="text-[9px] uppercase px-2 py-0.5 rounded font-bold font-mono tracking-wider bg-blue-950/40 text-blue-300 border border-blue-900/50">
                             {req.category}
                           </span>
@@ -1425,6 +1931,56 @@ export default function Home() {
                                 style={{ width: `${Math.min(100, (req.approvalsCount / config.threshold) * 100)}%` }}
                               ></div>
                             </div>
+                          </div>
+                        )}
+
+                        {/* Discussion thread (pending requests only, any member) */}
+                        {req.status === 0 && (
+                          <div className="mt-3">
+                            <button
+                              onClick={() => toggleDiscussion(req.id)}
+                              className="text-[10px] font-bold text-blue-400 hover:text-blue-300 uppercase font-mono flex items-center gap-1 cursor-pointer"
+                            >
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                              </svg>
+                              Discussion {(commentsMap[req.id] || []).length > 0 ? `(${commentsMap[req.id].length})` : ""}
+                              {expandedDiscussion === req.id ? " ▲" : " ▼"}
+                            </button>
+
+                            {expandedDiscussion === req.id && (
+                              <div className="mt-2 space-y-2">
+                                {(commentsMap[req.id] || []).map((c, idx) => (
+                                  <div key={idx} className="bg-slate-950/60 border border-slate-900/80 rounded-lg px-3 py-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-[10px] font-bold text-cyan-400 font-mono">{getAccountLabel(c.author)}</span>
+                                      <span className="text-[9px] text-slate-600 font-mono">{new Date(c.timestamp).toLocaleString()}</span>
+                                    </div>
+                                    <p className="text-xs text-slate-200 mt-1">{c.text}</p>
+                                  </div>
+                                ))}
+                                {(networkMode !== "testnet" || !!wallet.address) && (
+                                  <div className="flex gap-2 mt-1">
+                                    <input
+                                      type="text"
+                                      value={commentDraft}
+                                      onChange={(e) => setCommentDraft(e.target.value)}
+                                      onKeyDown={(e) => { if (e.key === "Enter") handlePostComment(req.id); }}
+                                      placeholder="Add a comment for the members..."
+                                      disabled={loadingAction === `comment_${req.id}`}
+                                      className="flex-1 bg-slate-950/60 border border-slate-800/80 text-white rounded-lg py-1.5 px-3 text-[11px] outline-none focus:border-cyan-500/40 transition-all placeholder-slate-600"
+                                    />
+                                    <button
+                                      onClick={() => handlePostComment(req.id)}
+                                      disabled={!commentDraft.trim() || loadingAction === `comment_${req.id}`}
+                                      className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-blue-600/30 text-blue-300 border border-blue-500/40 hover:bg-blue-600/50 disabled:opacity-40 transition-all cursor-pointer"
+                                    >
+                                      {loadingAction === `comment_${req.id}` ? "..." : "Post"}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1532,8 +2088,27 @@ export default function Home() {
               </svg>
               Soroban Registry Event Ledger
             </span>
-            <span className="text-[9px] uppercase bg-cyan-950/40 px-2 py-0.5 rounded text-cyan-400 border border-cyan-800/35 font-mono">
-              Live Feed
+            <span className="flex items-center gap-2">
+              {/* Export reports as CSV (feature: export reports) */}
+              <button
+                onClick={exportRequestsCsv}
+                disabled={requests.length === 0}
+                title="Download spending requests as CSV"
+                className="text-[9px] uppercase bg-slate-900/70 px-2 py-1 rounded text-blue-300 border border-blue-800/40 hover:bg-slate-850 hover:text-blue-200 disabled:opacity-40 transition-all font-mono cursor-pointer"
+              >
+                Export Requests CSV
+              </button>
+              <button
+                onClick={exportActivityCsv}
+                disabled={activities.length === 0}
+                title="Download the activity ledger as CSV"
+                className="text-[9px] uppercase bg-slate-900/70 px-2 py-1 rounded text-cyan-300 border border-cyan-800/40 hover:bg-slate-850 hover:text-cyan-200 disabled:opacity-40 transition-all font-mono cursor-pointer"
+              >
+                Export Activity CSV
+              </button>
+              <span className="text-[9px] uppercase bg-cyan-950/40 px-2 py-0.5 rounded text-cyan-400 border border-cyan-800/35 font-mono">
+                Live Feed
+              </span>
             </span>
           </h4>
 

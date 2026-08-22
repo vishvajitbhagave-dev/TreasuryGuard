@@ -728,6 +728,9 @@
                 },
                 {
                   "string": "Hacker attempt"
+                },
+                {
+                  "string": ""
                 }
               ]
             }
@@ -830,6 +833,9 @@
                     },
                     {
                       "string": "Hacker attempt"
+                    },
+                    {
+                      "string": ""
                     }
                   ]
                 }

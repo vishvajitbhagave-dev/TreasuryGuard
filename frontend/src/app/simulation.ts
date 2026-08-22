@@ -1,13 +1,17 @@
-import { VaultConfig, SpendingRequest, ActivityLog } from "./types";
+import { VaultConfig, SpendingRequest, ActivityLog, Comment, VaultRules } from "./types";
 
 export interface SimState {
   config: VaultConfig;
   members: string[];
+  roles: { [address: string]: string };
   requests: SpendingRequest[];
   balance: string;
   activities: ActivityLog[];
   userBalances: { [address: string]: string };
   paused: boolean;
+  rules: VaultRules;
+  contributions: { [address: string]: { [period: number]: number } };
+  requestComments: { [requestId: number]: Comment[] };
 }
 
 // Predefined mock addresses
@@ -37,6 +41,7 @@ const DEFAULT_STATE: SimState = {
     purpose: "Shared multi-sig fund for group expenses",
   },
   members: [SIM_ACCOUNTS.ALICE, SIM_ACCOUNTS.BOB, SIM_ACCOUNTS.CHARLIE],
+  roles: { ...SIM_ROLES },
   requests: [
     {
       id: 1,
@@ -44,6 +49,7 @@ const DEFAULT_STATE: SimState = {
       amount: "1500",
       category: "Infrastructure",
       description: "Server hosting and infrastructure bill - Q3",
+      receiptUrl: "https://receipts.vaultlink.demo/hosting-q3.pdf",
       approvalsCount: 1,
       status: 0, // Pending
       createdAt: Date.now() - 3600000 * 24, // 1 day ago
@@ -55,6 +61,7 @@ const DEFAULT_STATE: SimState = {
       amount: "2500",
       category: "Payroll",
       description: "Frontend development services - Milestone 1",
+      receiptUrl: "",
       approvalsCount: 2,
       status: 1, // Executed
       createdAt: Date.now() - 3600000 * 12, // 12 hours ago
@@ -66,6 +73,7 @@ const DEFAULT_STATE: SimState = {
       amount: "800",
       category: "Marketing",
       description: "Social media ad campaign (cancelled)",
+      receiptUrl: "",
       approvalsCount: 0,
       status: 2, // Cancelled
       createdAt: Date.now() - 3600000 * 3, // 3 hours ago
@@ -138,6 +146,9 @@ const DEFAULT_STATE: SimState = {
     [SIM_ACCOUNTS.CHARLIE]: "3000",
   },
   paused: false,
+  rules: { maxRequestAmount: "0", blockedCategories: [], monthlyTarget: "0" },
+  contributions: {},
+  requestComments: {},
 };
 
 // Key used to store simulated blockchain state in localStorage
@@ -169,6 +180,12 @@ export const resetSimulation = (): SimState => {
   return DEFAULT_STATE;
 };
 
+// UTC calendar month index (year * 12 + month) — mirrors contract month_period
+export const currentPeriod = (): number => {
+  const d = new Date();
+  return d.getUTCFullYear() * 12 + d.getUTCMonth();
+};
+
 // Emergency pause toggle (Owner only). While paused, withdrawals are blocked.
 export const simulatedSetPaused = (caller: string, paused: boolean): SimState => {
   const state = getSimulationState();
@@ -195,6 +212,11 @@ export const simulatedDeposit = (from: string, amount: number): SimState => {
   const userBal = parseFloat(state.userBalances[from] || "0") - amount;
   state.userBalances[from] = Math.max(0, userBal).toString();
 
+  // Record contribution for monthly tracking (mirrors contract deposit)
+  const period = currentPeriod();
+  if (!state.contributions[from]) state.contributions[from] = {};
+  state.contributions[from][period] = (state.contributions[from][period] || 0) + amount;
+
   // Log activity
   const newActivity: ActivityLog = {
     id: `a${Date.now()}`,
@@ -208,12 +230,70 @@ export const simulatedDeposit = (from: string, amount: number): SimState => {
   return state;
 };
 
+// Owner adds a member by wallet address with a role (feature: invite members)
+export const simulatedAddMember = (caller: string, address: string, role: string): SimState => {
+  const state = getSimulationState();
+  if (!state.members.includes(address)) {
+    state.members = [...state.members, address];
+  }
+  state.roles[address] = role;
+
+  const newActivity: ActivityLog = {
+    id: `a${Date.now()}`,
+    timestamp: Date.now(),
+    type: "add_member",
+    user: caller,
+    details: `Added member ${address} with role ${role}`,
+  };
+  state.activities = [newActivity, ...state.activities];
+  saveSimulationState(state);
+  return state;
+};
+
+// Owner sets the expected monthly contribution target (feature: monthly tracking)
+export const simulatedSetMonthlyTarget = (caller: string, amount: number): SimState => {
+  const state = getSimulationState();
+  state.rules.monthlyTarget = amount.toString();
+
+  const newActivity: ActivityLog = {
+    id: `a${Date.now()}`,
+    timestamp: Date.now(),
+    type: "set_rules",
+    user: caller,
+    details: `Set monthly contribution target to ${amount} USDC`,
+  };
+  state.activities = [newActivity, ...state.activities];
+  saveSimulationState(state);
+  return state;
+};
+
+// Any member comments on a pending request (feature: comment on requests)
+export const simulatedAddComment = (requestId: number, author: string, text: string): SimState => {
+  const state = getSimulationState();
+
+  const newComment: Comment = { author, text, timestamp: Date.now() };
+  const existing = state.requestComments[requestId] || [];
+  state.requestComments[requestId] = [...existing, newComment];
+
+  const newActivity: ActivityLog = {
+    id: `a${Date.now()}`,
+    timestamp: Date.now(),
+    type: "add_comment",
+    user: author,
+    details: `Commented on Request #${requestId}`,
+  };
+  state.activities = [newActivity, ...state.activities];
+  saveSimulationState(state);
+  return state;
+};
+
 export const simulatedSubmitRequest = (
   proposer: string,
   recipient: string,
   amount: number,
   category: string,
-  description: string
+  description: string,
+  receiptUrl = ""
 ): SimState => {
   const state = getSimulationState();
   const nextId = state.requests.length > 0 ? Math.max(...state.requests.map((r) => r.id)) + 1 : 1;
@@ -224,6 +304,7 @@ export const simulatedSubmitRequest = (
     amount: amount.toString(),
     category,
     description,
+    receiptUrl,
     approvalsCount: 0,
     status: 0, // Pending
     createdAt: Date.now(),

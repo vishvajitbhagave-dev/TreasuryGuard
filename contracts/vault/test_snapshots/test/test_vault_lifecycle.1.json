@@ -130,6 +130,9 @@
                 },
                 {
                   "string": "Repair roof"
+                },
+                {
+                  "string": "https://receipts.example/roof.pdf"
                 }
               ]
             }
@@ -704,6 +707,41 @@
                         "key": {
                           "vec": [
                             {
+                              "symbol": "Contribution"
+                            },
+                            {
+                              "map": [
+                                {
+                                  "key": {
+                                    "symbol": "member"
+                                  },
+                                  "val": {
+                                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                                  }
+                                },
+                                {
+                                  "key": {
+                                    "symbol": "period"
+                                  },
+                                  "val": {
+                                    "u32": 23640
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        "val": {
+                          "i128": {
+                            "hi": 0,
+                            "lo": 500
+                          }
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
                               "symbol": "Members"
                             }
                           ]
@@ -789,6 +827,14 @@
                               },
                               "val": {
                                 "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "receipt_url"
+                              },
+                              "val": {
+                                "string": "https://receipts.example/roof.pdf"
                               }
                             },
                             {
@@ -2296,6 +2342,9 @@
                 },
                 {
                   "string": "Repair roof"
+                },
+                {
+                  "string": "https://receipts.example/roof.pdf"
                 }
               ]
             }
@@ -2578,6 +2627,14 @@
                 },
                 {
                   "key": {
+                    "symbol": "receipt_url"
+                  },
+                  "val": {
+                    "string": "https://receipts.example/roof.pdf"
+                  }
+                },
+                {
+                  "key": {
                     "symbol": "recipient"
                   },
                   "val": {
@@ -2853,6 +2910,14 @@
                   },
                   "val": {
                     "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "receipt_url"
+                  },
+                  "val": {
+                    "string": "https://receipts.example/roof.pdf"
                   }
                 },
                 {
@@ -3188,6 +3253,14 @@
                   },
                   "val": {
                     "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "receipt_url"
+                  },
+                  "val": {
+                    "string": "https://receipts.example/roof.pdf"
                   }
                 },
                 {
@@ -3611,6 +3684,14 @@
                   },
                   "val": {
                     "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "receipt_url"
+                  },
+                  "val": {
+                    "string": "https://receipts.example/roof.pdf"
                   }
                 },
                 {

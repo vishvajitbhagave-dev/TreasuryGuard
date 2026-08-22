@@ -25,6 +25,8 @@ pub enum Error {
     AmountExceedsLimit = 9,
     CategoryRestricted = 10,
     VaultPaused = 11,
+    RequestNotFound = 12,
+    EmptyComment = 13,
 }
 
 // Member roles: Owner manages rules/members and can do everything,
@@ -67,11 +69,32 @@ pub struct VaultConfig {
 
 // Owner-configurable spending rules enforced at request submission.
 // max_request_amount of 0 means no limit.
+// monthly_target is the expected contribution per member per calendar month
+// (0 disables monthly contribution tracking).
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SpendingRules {
     pub max_request_amount: i128,
     pub blocked_categories: Vec<String>,
+    pub monthly_target: i128,
+}
+
+// Discussion thread entry attached to a spending request (feature: comments).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Comment {
+    pub author: Address,
+    pub text: String,
+    pub created_at: u64,
+}
+
+// Per-member cumulative deposits for one calendar month (feature:
+// monthly contribution tracking). period = year*12 + month (UTC).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContributionKey {
+    pub member: Address,
+    pub period: u32,
 }
 
 #[contracttype]
@@ -82,6 +105,7 @@ pub struct SpendingRequest {
     pub amount: i128,
     pub category: String,
     pub description: String,
+    pub receipt_url: String,
     pub approvals_count: u32,
     pub status: u32, // 0 = Pending, 1 = Executed, 2 = Cancelled
     pub created_at: u64,
@@ -95,9 +119,26 @@ pub enum DataKey {
     Roles,         // Map<Address, Role>
     Rules,         // SpendingRules
     Paused,        // bool
+    Comments(u64), // Vec<Comment> for request id
+    Contribution(ContributionKey), // i128 cumulative deposit amount
     Request(u64),
     Approved(u64, Address),
     RequestCount,
+}
+
+// UTC calendar month index (year * 12 + month) from a unix timestamp.
+// Shared by contribution tracking so contract and UI agree on periods.
+pub fn month_period(ts: u64) -> u32 {
+    let days = (ts / 86_400) as i64;
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    ((y + if m <= 2 { 1 } else { 0 }) as u32) * 12 + (m - 1) as u32
 }
 
 #[contract]
@@ -189,6 +230,12 @@ impl VaultContract {
         // Transfer funds from sender to this contract
         token_client.transfer(&from, &env.current_contract_address(), &amount);
 
+        // Record this member's contribution for monthly tracking
+        let period = month_period(env.ledger().timestamp());
+        let key = ContributionKey { member: from.clone(), period };
+        let current = env.storage().instance().get::<DataKey, i128>(&DataKey::Contribution(key.clone())).unwrap_or(0);
+        env.storage().instance().set(&DataKey::Contribution(key), &(current + amount));
+
         // Inter-contract call to registry to log activity
         let registry_client = RegistryClient::new(&env, &config.registry);
         registry_client.log_activity(&from, &Symbol::new(&env, "deposit"));
@@ -209,6 +256,7 @@ impl VaultContract {
         amount: i128,
         category: String,
         description: String,
+        receipt_url: String,
     ) -> Result<u64, Error> {
         proposer.require_auth();
         
@@ -241,6 +289,7 @@ impl VaultContract {
             amount,
             category,
             description,
+            receipt_url,
             approvals_count: 0,
             status: 0, // Pending
             created_at: env.ledger().timestamp(),
@@ -386,6 +435,7 @@ impl VaultContract {
         caller: Address,
         max_request_amount: i128,
         blocked_categories: Vec<String>,
+        monthly_target: i128,
     ) -> Result<(), Error> {
         caller.require_auth();
         Self::require_role(&env, &caller, &[Role::Owner])?;
@@ -393,6 +443,7 @@ impl VaultContract {
         let rules = SpendingRules {
             max_request_amount,
             blocked_categories,
+            monthly_target,
         };
         env.storage().instance().set(&DataKey::Rules, &rules);
         Ok(())
@@ -402,7 +453,69 @@ impl VaultContract {
         env.storage().instance().get(&DataKey::Rules).unwrap_or_else(|| SpendingRules {
             max_request_amount: 0,
             blocked_categories: Vec::new(&env),
+            monthly_target: 0,
         })
+    }
+
+    // Comments on a spending request (feature: comment on requests).
+    // Any member may comment while the request is still pending.
+    pub fn add_comment(env: Env, commenter: Address, request_id: u64, text: String) -> Result<(), Error> {
+        commenter.require_auth();
+
+        // Any recognized member (including viewers) can join the discussion
+        Self::require_role(&env, &commenter, &[Role::Owner, Role::Approver, Role::Contributor, Role::Viewer])?;
+
+        let request: SpendingRequest = env
+            .storage()
+            .instance()
+            .get(&DataKey::Request(request_id))
+            .ok_or(Error::RequestNotFound)?;
+
+        if request.status != 0 {
+            return Err(Error::RequestNotPending);
+        }
+        if text.len() == 0 {
+            return Err(Error::EmptyComment);
+        }
+
+        let mut comments: Vec<Comment> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Comments(request_id))
+            .unwrap_or_else(|| Vec::new(&env));
+        comments.push_back(Comment {
+            author: commenter.clone(),
+            text,
+            created_at: env.ledger().timestamp(),
+        });
+        env.storage().instance().set(&DataKey::Comments(request_id), &comments);
+
+        let config: VaultConfig = env.storage().instance().get(&DataKey::Config).unwrap();
+        let registry_client = RegistryClient::new(&env, &config.registry);
+        registry_client.log_activity(&commenter, &Symbol::new(&env, "add_comment"));
+
+        env.events().publish(
+            (Symbol::new(&env, "comment_added"), commenter),
+            request_id,
+        );
+
+        Ok(())
+    }
+
+    pub fn get_comments(env: Env, request_id: u64) -> Vec<Comment> {
+        env.storage()
+            .instance()
+            .get(&DataKey::Comments(request_id))
+            .unwrap_or_else(|| Vec::new(&env))
+    }
+
+    // Cumulative amount a member deposited during a calendar month period.
+    pub fn get_contribution(env: Env, member: Address, period: u32) -> i128 {
+        let key = ContributionKey { member, period };
+        env.storage()
+            .instance()
+            .get::<DataKey, i128>(&DataKey::Contribution(key))
+            .unwrap_or(0)
     }
 
     // Emergency pause (Owner only). While paused, withdrawals cannot execute;
@@ -504,6 +617,7 @@ mod test {
     use super::*;
     use soroban_sdk::{Env, Address, Vec, String, Symbol};
     use soroban_sdk::testutils::Address as _;
+    use soroban_sdk::testutils::Ledger as _;
 
     #[contract]
     pub struct MockRegistry;
@@ -590,6 +704,7 @@ mod test {
             &300i128,
             &str(&env, "Operations"),
             &str(&env, "Repair roof"),
+            &str(&env, "https://receipts.example/roof.pdf"),
         );
         assert_eq!(req_id, 1);
         assert_eq!(vault_client.get_request_count(), 1);
@@ -598,6 +713,7 @@ mod test {
         assert_eq!(request.recipient, recipient);
         assert_eq!(request.amount, 300i128);
         assert_eq!(request.category, str(&env, "Operations"));
+        assert_eq!(request.receipt_url, str(&env, "https://receipts.example/roof.pdf"));
         assert_eq!(request.approvals_count, 0);
         assert_eq!(request.status, 0);
 
@@ -663,6 +779,7 @@ mod test {
             &100i128,
             &str(&env, "Operations"),
             &str(&env, "Hacker attempt"),
+            &str(&env, ""),
         );
         assert!(res.is_err());
     }
@@ -720,6 +837,7 @@ mod test {
             &50i128,
             &str(&env, "Payroll"),
             &str(&env, "Contractor payout"),
+            &str(&env, ""),
         );
         let res = vault_client.try_approve_request(&contributor, &req_id);
         assert!(res.is_err());
@@ -772,11 +890,11 @@ mod test {
         // Non-owner cannot configure rules
         let mut blocked = Vec::new(&env);
         blocked.push_back(str(&env, "Marketing"));
-        let res = vault_client.try_set_rules(&contributor, &1000i128, &blocked);
+        let res = vault_client.try_set_rules(&contributor, &1000i128, &blocked, &0i128);
         assert!(res.is_err());
 
         // Owner sets a per-request limit and a restricted category
-        vault_client.set_rules(&admin, &1000i128, &blocked);
+        vault_client.set_rules(&admin, &1000i128, &blocked, &0i128);
         let rules = vault_client.get_rules();
         assert_eq!(rules.max_request_amount, 1000i128);
         assert_eq!(rules.blocked_categories.len(), 1);
@@ -788,6 +906,7 @@ mod test {
             &500i128,
             &str(&env, "Operations"),
             &str(&env, "Within limit"),
+            &str(&env, ""),
         );
         assert_eq!(ok_id, 1);
 
@@ -798,6 +917,7 @@ mod test {
             &2000i128,
             &str(&env, "Operations"),
             &str(&env, "Over limit"),
+            &str(&env, ""),
         );
         assert!(res.is_err());
 
@@ -808,6 +928,7 @@ mod test {
             &100i128,
             &str(&env, "Marketing"),
             &str(&env, "Blocked category"),
+            &str(&env, ""),
         );
         assert!(res.is_err());
     }
@@ -859,6 +980,7 @@ mod test {
             &100i128,
             &str(&env, "Operations"),
             &str(&env, "Repair roof"),
+            &str(&env, ""),
         );
         vault_client.approve_request(&admin, &req_id);
 
@@ -882,6 +1004,7 @@ mod test {
             &50i128,
             &str(&env, "Operations"),
             &str(&env, "While paused"),
+            &str(&env, ""),
         );
         vault_client.approve_request(&admin, &req2);
 
@@ -890,5 +1013,154 @@ mod test {
         assert!(!vault_client.is_paused());
         vault_client.execute_request(&admin, &req_id);
         assert_eq!(vault_client.get_request(&req_id).status, 1);
+    }
+
+    #[test]
+    fn test_comments() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let contributor = Address::generate(&env);
+        let viewer = Address::generate(&env);
+        let non_member = Address::generate(&env);
+        let recipient = Address::generate(&env);
+
+        let registry_address = Address::generate(&env);
+        env.register_contract(&registry_address, MockRegistry);
+
+        let token_admin = Address::generate(&env);
+        let token_id = env.register_stellar_asset_contract(token_admin.clone());
+
+        let vault_address = Address::generate(&env);
+        env.register_contract(&vault_address, VaultContract);
+        let vault_client = VaultContractClient::new(&env, &vault_address);
+
+        let mut members = Vec::new(&env);
+        members.push_back(contributor.clone());
+        members.push_back(viewer.clone());
+
+        let mut roles = Vec::new(&env);
+        roles.push_back(str(&env, "contributor"));
+        roles.push_back(str(&env, "viewer"));
+
+        vault_client.initialize(
+            &admin,
+            &token_id,
+            &registry_address,
+            &1u32,
+            &members,
+            &roles,
+            &str(&env, "Team Treasury"),
+            &str(&env, "Purpose"),
+        );
+
+        let req_id = vault_client.submit_request(
+            &contributor,
+            &recipient,
+            &100i128,
+            &str(&env, "Operations"),
+            &str(&env, "Repair roof"),
+            &str(&env, ""),
+        );
+
+        // Contributor discusses the pending request
+        vault_client.add_comment(&contributor, &req_id, &str(&env, "Why so expensive?"));
+        // Viewers can join the discussion too
+        vault_client.add_comment(&viewer, &req_id, &str(&env, "Quote looks fair to me."));
+
+        let comments = vault_client.get_comments(&req_id);
+        assert_eq!(comments.len(), 2);
+        assert_eq!(comments.get(0).unwrap().author, contributor);
+        assert_eq!(comments.get(0).unwrap().text, str(&env, "Why so expensive?"));
+        assert_eq!(comments.get(1).unwrap().text, str(&env, "Quote looks fair to me."));
+
+        // Non-members cannot comment
+        let res = vault_client.try_add_comment(&non_member, &req_id, &str(&env, "Spam"));
+        assert!(res.is_err());
+
+        // Empty comments are rejected
+        let res = vault_client.try_add_comment(&contributor, &req_id, &str(&env, ""));
+        assert!(res.is_err());
+
+        // Comments on non-pending requests are rejected
+        vault_client.cancel_request(&contributor, &req_id);
+        let res = vault_client.try_add_comment(&contributor, &req_id, &str(&env, "Too late"));
+        assert!(res.is_err());
+
+        // Unknown request ids are rejected
+        let res = vault_client.try_add_comment(&contributor, &999u64, &str(&env, "Ghost"));
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_monthly_contributions() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let alice = Address::generate(&env);
+        let bob = Address::generate(&env);
+
+        let registry_address = Address::generate(&env);
+        env.register_contract(&registry_address, MockRegistry);
+
+        let token_admin = Address::generate(&env);
+        let token_id = env.register_stellar_asset_contract(token_admin.clone());
+        let token_client = soroban_sdk::token::StellarAssetClient::new(&env, &token_id);
+        token_client.mint(&alice, &1000i128);
+        token_client.mint(&bob, &1000i128);
+
+        let vault_address = Address::generate(&env);
+        env.register_contract(&vault_address, VaultContract);
+        let vault_client = VaultContractClient::new(&env, &vault_address);
+
+        let mut members = Vec::new(&env);
+        members.push_back(alice.clone());
+        members.push_back(bob.clone());
+
+        let mut roles = Vec::new(&env);
+        roles.push_back(str(&env, "contributor"));
+        roles.push_back(str(&env, "contributor"));
+
+        vault_client.initialize(
+            &admin,
+            &token_id,
+            &registry_address,
+            &1u32,
+            &members,
+            &roles,
+            &str(&env, "Team Treasury"),
+            &str(&env, "Purpose"),
+        );
+
+        // Owner sets a monthly contribution target of 100
+        let no_blocked: Vec<String> = Vec::new(&env);
+        vault_client.set_rules(&admin, &0i128, &no_blocked, &100i128);
+        assert_eq!(vault_client.get_rules().monthly_target, 100i128);
+
+        // Both contribute in the same month (Nov 2023)
+        env.ledger().with_mut(|li| li.timestamp = 1_700_000_000);
+        let period_nov = month_period(1_700_000_000);
+        vault_client.deposit(&alice, &100i128);
+        vault_client.deposit(&bob, &40i128);
+
+        // Alice tops up later in the same month; amounts accumulate
+        vault_client.deposit(&alice, &50i128);
+
+        assert_eq!(vault_client.get_contribution(&alice, &period_nov), 150i128);
+        assert_eq!(vault_client.get_contribution(&bob, &period_nov), 40i128);
+
+        // A deposit in the next month lands in its own bucket (Dec 2023)
+        env.ledger().with_mut(|li| li.timestamp = 1_700_000_000 + 40 * 86_400);
+        let period_dec = month_period(1_700_000_000 + 40 * 86_400);
+        assert_ne!(period_dec, period_nov);
+        vault_client.deposit(&bob, &60i128);
+
+        assert_eq!(vault_client.get_contribution(&bob, &period_dec), 60i128);
+        assert_eq!(vault_client.get_contribution(&bob, &period_nov), 40i128);
+
+        // Members who never deposited read as zero
+        assert_eq!(vault_client.get_contribution(&admin, &period_dec), 0i128);
     }
 }

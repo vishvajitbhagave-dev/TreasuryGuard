@@ -1,5 +1,5 @@
 import * as StellarSdk from "@stellar/stellar-sdk";
-import { VaultConfig, SpendingRequest, ActivityLog } from "./types";
+import { VaultConfig, SpendingRequest, ActivityLog, Comment, VaultRules } from "./types";
 import { getWalletProvider, WalletProviderId } from "./wallet-adapters";
 
 // Fallback contract constants in case deploy.ps1 hasn't been run or config is missing
@@ -138,6 +138,7 @@ export async function fetchContractRequest(vaultId: string, requestId: number): 
       amount: String(req.amount),
       category: req.category !== undefined ? String(req.category) : "Other",
       description: String(req.description),
+      receiptUrl: req.receipt_url !== undefined ? String(req.receipt_url) : "",
       approvalsCount: Number(req.approvals_count),
       status: Number(req.status) as 0 | 1 | 2,
       createdAt: Number(req.created_at) * 1000,
@@ -150,6 +151,7 @@ export async function fetchContractRequest(vaultId: string, requestId: number): 
       amount: "1000",
       category: "Operations",
       description: "Contract simulated spending request",
+      receiptUrl: "",
       approvalsCount: 1,
       status: 0,
       createdAt: Date.now(),
@@ -367,6 +369,130 @@ export async function fetchVaultPaused(vaultId: string): Promise<boolean> {
   }
 }
 
+/**
+ * Invite members (Owner only): upsert a wallet address with a role.
+ */
+export async function setMemberRoleInVault(
+  vaultId: string,
+  caller: string,
+  member: string,
+  role: string,
+  providerId: WalletProviderId = "freighter"
+): Promise<string> {
+  const args = [
+    StellarSdk.nativeToScVal(caller, { type: "address" }),
+    StellarSdk.nativeToScVal(member, { type: "address" }),
+    StellarSdk.nativeToScVal(role, { type: "string" }),
+  ];
+  return invokeContractMethod(vaultId, "set_member_role", args, caller, providerId);
+}
+
+export async function fetchMembers(vaultId: string): Promise<string[]> {
+  try {
+    const result = await invokeReadOnlyMethod(vaultId, "get_members");
+    return Array.isArray(result) ? result.map(String) : [];
+  } catch (err) {
+    console.error("Error fetching members:", err);
+    return [];
+  }
+}
+
+/**
+ * Comment on a pending spending request (any member).
+ */
+export async function addCommentToVault(
+  vaultId: string,
+  commenter: string,
+  requestId: number,
+  text: string,
+  providerId: WalletProviderId = "freighter"
+): Promise<string> {
+  const args = [
+    StellarSdk.nativeToScVal(commenter, { type: "address" }),
+    StellarSdk.nativeToScVal(requestId, { type: "u64" }),
+    StellarSdk.nativeToScVal(text, { type: "string" }),
+  ];
+  return invokeContractMethod(vaultId, "add_comment", args, commenter, providerId);
+}
+
+export async function fetchContractComments(vaultId: string, requestId: number): Promise<Comment[]> {
+  try {
+    const result = await invokeReadOnlyMethod(vaultId, "get_comments", [
+      StellarSdk.nativeToScVal(requestId, { type: "u64" })
+    ]);
+    const arr = Array.isArray(result) ? result : [];
+    return arr.map((c) => {
+      const rec = c as Record<string, unknown>;
+      return {
+        author: String(rec.author),
+        text: String(rec.text),
+        timestamp: Number(rec.created_at) * 1000,
+      };
+    });
+  } catch (err) {
+    console.error("Error fetching comments:", err);
+    return [];
+  }
+}
+
+/**
+ * Owner-configurable spending rules incl. the monthly contribution target.
+ */
+export async function fetchRules(vaultId: string): Promise<VaultRules> {
+  const defaults: VaultRules = { maxRequestAmount: "0", blockedCategories: [], monthlyTarget: "0" };
+  try {
+    const r = await invokeReadOnlyMethod(vaultId, "get_rules");
+    return {
+      maxRequestAmount: String(r.max_request_amount ?? defaults.maxRequestAmount),
+      blockedCategories: Array.isArray(r.blocked_categories) ? r.blocked_categories.map(String) : [],
+      monthlyTarget: String(r.monthly_target ?? defaults.monthlyTarget),
+    };
+  } catch (err) {
+    console.error("Error fetching rules:", err);
+    return defaults;
+  }
+}
+
+export async function fetchContribution(vaultId: string, member: string, period: number): Promise<string> {
+  try {
+    const result = await invokeReadOnlyMethod(vaultId, "get_contribution", [
+      StellarSdk.nativeToScVal(member, { type: "address" }),
+      StellarSdk.nativeToScVal(period, { type: "u32" }),
+    ]);
+    return String(result ?? "0");
+  } catch (err) {
+    console.error("Error fetching contribution:", err);
+    return "0";
+  }
+}
+
+export async function fetchMemberRole(vaultId: string, member: string): Promise<string> {
+  const result = await invokeReadOnlyMethod(vaultId, "get_member_role", [
+    StellarSdk.nativeToScVal(member, { type: "address" })
+  ]);
+  return String(result);
+}
+
+/**
+ * Rule engine configuration (Owner only), incl. monthly contribution target.
+ */
+export async function setRulesInVault(
+  vaultId: string,
+  caller: string,
+  maxRequestAmount: string,
+  blockedCategories: string[],
+  monthlyTarget: string,
+  providerId: WalletProviderId = "freighter"
+): Promise<string> {
+  const args = [
+    StellarSdk.nativeToScVal(caller, { type: "address" }),
+    StellarSdk.nativeToScVal(BigInt(maxRequestAmount || "0"), { type: "i128" }),
+    StellarSdk.nativeToScVal(blockedCategories),
+    StellarSdk.nativeToScVal(BigInt(monthlyTarget || "0"), { type: "i128" }),
+  ];
+  return invokeContractMethod(vaultId, "set_rules", args, caller, providerId);
+}
+
 export async function submitRequestToVault(
   vaultId: string,
   proposer: string,
@@ -374,6 +500,7 @@ export async function submitRequestToVault(
   amount: string,
   category: string,
   description: string,
+  receiptUrl: string,
   providerId: WalletProviderId = "freighter"
 ): Promise<string> {
   const args = [
@@ -382,6 +509,7 @@ export async function submitRequestToVault(
     StellarSdk.nativeToScVal(BigInt(amount), { type: "i128" }),
     StellarSdk.nativeToScVal(category, { type: "string" }),
     StellarSdk.nativeToScVal(description, { type: "string" }),
+    StellarSdk.nativeToScVal(receiptUrl, { type: "string" }),
   ];
   return invokeContractMethod(vaultId, "submit_request", args, proposer, providerId);
 }
