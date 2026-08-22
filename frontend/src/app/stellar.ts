@@ -101,13 +101,15 @@ export async function fetchContractConfig(vaultId: string): Promise<VaultConfig>
   try {
     const result = await invokeReadOnlyMethod(vaultId, "get_config");
     // get_config returns VaultConfig struct in Rust, converted to native object:
-    // { admin: string, token: string, registry: string, threshold: number }
+    // { admin, token, registry, threshold, name, purpose }
     const cfg = result as Record<string, string | number>;
     return {
       admin: String(cfg.admin),
       token: String(cfg.token),
       registry: String(cfg.registry),
       threshold: Number(cfg.threshold),
+      name: cfg.name !== undefined ? String(cfg.name) : "Team Treasury",
+      purpose: cfg.purpose !== undefined ? String(cfg.purpose) : "Shared multi-sig fund for group expenses",
     };
   } catch {
     return {
@@ -115,6 +117,8 @@ export async function fetchContractConfig(vaultId: string): Promise<VaultConfig>
       token: CONTRACTS.tokenId,
       registry: CONTRACTS.registryId,
       threshold: 2,
+      name: "Team Treasury",
+      purpose: "Shared multi-sig fund for group expenses",
     };
   }
 }
@@ -132,6 +136,7 @@ export async function fetchContractRequest(vaultId: string, requestId: number): 
       id: Number(req.id),
       recipient: String(req.recipient),
       amount: String(req.amount),
+      category: req.category !== undefined ? String(req.category) : "Other",
       description: String(req.description),
       approvalsCount: Number(req.approvals_count),
       status: Number(req.status) as 0 | 1 | 2,
@@ -143,6 +148,7 @@ export async function fetchContractRequest(vaultId: string, requestId: number): 
       id: requestId,
       recipient: "G-RECIPIENT-ADDRESS-XXXXXXXXXXXXX",
       amount: "1000",
+      category: "Operations",
       description: "Contract simulated spending request",
       approvalsCount: 1,
       status: 0,
@@ -340,6 +346,7 @@ export async function submitRequestToVault(
   proposer: string,
   recipient: string,
   amount: string,
+  category: string,
   description: string,
   providerId: WalletProviderId = "freighter"
 ): Promise<string> {
@@ -347,6 +354,7 @@ export async function submitRequestToVault(
     StellarSdk.nativeToScVal(proposer, { type: "address" }),
     StellarSdk.nativeToScVal(recipient, { type: "address" }),
     StellarSdk.nativeToScVal(BigInt(amount), { type: "i128" }),
+    StellarSdk.nativeToScVal(category, { type: "string" }),
     StellarSdk.nativeToScVal(description, { type: "string" }),
   ];
   return invokeContractMethod(vaultId, "submit_request", args, proposer, providerId);

@@ -44,22 +44,29 @@ $RegistryInitTx = (stellar contract invoke --id $RegistryId --source $Source --n
 Write-Host "Registry Initialized: $RegistryInitTx" -ForegroundColor Green
 
 Write-Host "=== 5. Initializing Vault Contract ===" -ForegroundColor Cyan
-# fn initialize(env: Env, admin: Address, token: Address, registry: Address, threshold: u32, members: Vec<Address>)
+# fn initialize(env: Env, admin: Address, token: Address, registry: Address, threshold: u32,
+#               members: Vec<Address>, roles: Vec<String>, name: String, purpose: String)
 # For simplicity, initialized with admin and another member as initial vault members
 $MembersArr = @($AdminAddress)
+$RolesArr = @("owner")
 if ($MemberAddress) {
     $MembersArr = @($AdminAddress, $MemberAddress)
+    $RolesArr = @("owner", "contributor")
     Write-Host "Adding Member Address to vault: $MemberAddress" -ForegroundColor Green
 }
-$MembersFile = "$PSScriptRoot\members.json"
-$MembersJson = $MembersArr | ConvertTo-Json -Compress
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-[System.IO.File]::WriteAllText($MembersFile, $MembersJson, $Utf8NoBom)
+$MembersFile = "$PSScriptRoot\members.json"
+$RolesFile = "$PSScriptRoot\roles.json"
+[System.IO.File]::WriteAllText($MembersFile, ($MembersArr | ConvertTo-Json -Compress), $Utf8NoBom)
+[System.IO.File]::WriteAllText($RolesFile, ($RolesArr | ConvertTo-Json -Compress), $Utf8NoBom)
 
-$VaultInitTx = (stellar contract invoke --id $VaultId --source $Source --network $Network -- initialize --admin $AdminAddress --token $TokenAddress --registry $RegistryId --threshold 1 --members-file-path $MembersFile)
+$VaultInitTx = (stellar contract invoke --id $VaultId --source $Source --network $Network -- initialize --admin $AdminAddress --token $TokenAddress --registry $RegistryId --threshold 1 --members-file-path $MembersFile --roles-file-path $RolesFile --name "Team Treasury" --purpose "Shared multi-sig fund for group expenses")
 
 if (Test-Path $MembersFile) {
     Remove-Item $MembersFile
+}
+if (Test-Path $RolesFile) {
+    Remove-Item $RolesFile
 }
 Write-Host "Vault Initialized: $VaultInitTx" -ForegroundColor Green
 

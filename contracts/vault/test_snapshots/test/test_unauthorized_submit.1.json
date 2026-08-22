@@ -172,6 +172,22 @@
                             },
                             {
                               "key": {
+                                "symbol": "name"
+                              },
+                              "val": {
+                                "string": "Team Treasury"
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "purpose"
+                              },
+                              "val": {
+                                "string": "Purpose"
+                              }
+                            },
+                            {
+                              "key": {
                                 "symbol": "registry"
                               },
                               "val": {
@@ -223,6 +239,43 @@
                         },
                         "val": {
                           "u64": 0
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
+                              "symbol": "Roles"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "map": [
+                            {
+                              "key": {
+                                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
+                              },
+                              "val": {
+                                "vec": [
+                                  {
+                                    "symbol": "Owner"
+                                  }
+                                ]
+                              }
+                            },
+                            {
+                              "key": {
+                                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                              },
+                              "val": {
+                                "vec": [
+                                  {
+                                    "symbol": "Contributor"
+                                  }
+                                ]
+                              }
+                            }
+                          ]
                         }
                       }
                     ]
@@ -529,6 +582,19 @@
                       "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                     }
                   ]
+                },
+                {
+                  "vec": [
+                    {
+                      "string": "contributor"
+                    }
+                  ]
+                },
+                {
+                  "string": "Team Treasury"
+                },
+                {
+                  "string": "Purpose"
                 }
               ]
             }
@@ -658,6 +724,9 @@
                   }
                 },
                 {
+                  "string": "Operations"
+                },
+                {
                   "string": "Hacker attempt"
                 }
               ]
@@ -755,6 +824,9 @@
                         "hi": 0,
                         "lo": 100
                       }
+                    },
+                    {
+                      "string": "Operations"
                     },
                     {
                       "string": "Hacker attempt"

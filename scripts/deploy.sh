@@ -71,18 +71,24 @@ echo "Registry Initialized!"
 
 echo "=== 5. Initializing Vault Contract ==="
 MEMBERS_FILE="$SCRIPT_DIR/members.json"
+ROLES_FILE="$SCRIPT_DIR/roles.json"
 
 if [ -n "$MEMBER_ADDRESS" ]; then
     echo "Adding Member Address to vault: $MEMBER_ADDRESS"
     echo "[\"$ADMIN_ADDRESS\", \"$MEMBER_ADDRESS\"]" > "$MEMBERS_FILE"
+    echo '["owner", "contributor"]' > "$ROLES_FILE"
 else
     echo "[\"$ADMIN_ADDRESS\"]" > "$MEMBERS_FILE"
+    echo '["owner"]' > "$ROLES_FILE"
 fi
 
-stellar contract invoke --id "$VAULT_ID" --source "$SOURCE" --network "$NETWORK" -- initialize --admin "$ADMIN_ADDRESS" --token "$TOKEN_ADDRESS" --registry "$REGISTRY_ID" --threshold 1 --members-file-path "$MEMBERS_FILE"
+stellar contract invoke --id "$VAULT_ID" --source "$SOURCE" --network "$NETWORK" -- initialize --admin "$ADMIN_ADDRESS" --token "$TOKEN_ADDRESS" --registry "$REGISTRY_ID" --threshold 1 --members-file-path "$MEMBERS_FILE" --roles-file-path "$ROLES_FILE" --name "Team Treasury" --purpose "Shared multi-sig fund for group expenses"
 
 if [ -f "$MEMBERS_FILE" ]; then
     rm "$MEMBERS_FILE"
+fi
+if [ -f "$ROLES_FILE" ]; then
+    rm "$ROLES_FILE"
 fi
 echo "Vault Initialized!"
 

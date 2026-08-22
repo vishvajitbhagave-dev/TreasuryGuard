@@ -17,6 +17,7 @@ import {
   simulatedCancelRequest, 
   resetSimulation,
   SIM_ACCOUNTS,
+  SIM_ROLES,
   SimState
 } from "./simulation";
 import { 
@@ -49,12 +50,14 @@ export default function Home() {
   const [activeSimUser, setActiveSimUser] = useState<string>(SIM_ACCOUNTS.ALICE);
   
   // App states loaded from simulation or stellar
-  const [config, setConfig] = useState<VaultConfig>({
-    admin: "",
-    token: "",
-    registry: "",
-    threshold: 0
-  });
+    const [config, setConfig] = useState<VaultConfig>({
+      admin: "",
+      token: "",
+      registry: "",
+      threshold: 0,
+      name: "Team Treasury",
+      purpose: "Shared multi-sig fund for group expenses"
+    });
   const [requests, setRequests] = useState<SpendingRequest[]>([]);
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [vaultBalance, setVaultBalance] = useState<string>("0");
@@ -77,6 +80,7 @@ export default function Home() {
   const [newRequest, setNewRequest] = useState({
     recipient: "",
     amount: "",
+    category: "Operations",
     description: ""
   });
   
@@ -114,10 +118,10 @@ export default function Home() {
   // Helper to format addresses or names
   const getAccountLabel = (addr: string) => {
     if (!addr) return "Unknown";
-    if (addr === SIM_ACCOUNTS.ADMIN) return "Admin (Contract Owner)";
-    if (addr === SIM_ACCOUNTS.ALICE) return "Alice (Member)";
-    if (addr === SIM_ACCOUNTS.BOB) return "Bob (Member)";
-    if (addr === SIM_ACCOUNTS.CHARLIE) return "Charlie (Member)";
+    if (addr === SIM_ACCOUNTS.ADMIN) return "Admin (Owner)";
+    if (addr === SIM_ACCOUNTS.ALICE) return "Alice (Contributor)";
+    if (addr === SIM_ACCOUNTS.BOB) return "Bob (Approver)";
+    if (addr === SIM_ACCOUNTS.CHARLIE) return "Charlie (Viewer)";
     if (addr === SIM_ACCOUNTS.RECIPIENT) return "Recipient Merchant";
     return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
   };
@@ -205,10 +209,12 @@ export default function Home() {
         (u) => u !== activeSimUser
       );
       if (possibleUsers.length === 0) return;
-      const randomUser = possibleUsers[Math.floor(Math.random() * possibleUsers.length)];
 
       if (eventType === 0) {
-        // 1. Random deposit
+        // 1. Random deposit (Owner/Contributor roles only)
+        const depositors = possibleUsers.filter((u) => SIM_ROLES[u] === "owner" || SIM_ROLES[u] === "contributor");
+        if (depositors.length === 0) return;
+        const randomUser = depositors[Math.floor(Math.random() * depositors.length)];
         const amounts = [100, 250, 500, 1000];
         const amt = amounts[Math.floor(Math.random() * amounts.length)];
         const userBal = parseFloat(state.userBalances[randomUser] || "0");
@@ -218,28 +224,34 @@ export default function Home() {
           triggerNotification("info", `Real-time activity: ${getAccountLabel(randomUser)} deposited ${amt} USDC into the vault.`);
         }
       } else if (eventType === 1) {
-        // 2. Random proposal submission
-        const descs = [
-          "Developer stipend for backend fixes",
-          "Marketing audit and SEO tools subscription",
-          "Stellar Horizon node hosting coverage",
-          "SaaS integrations monthly payment",
-          "Security auditing services deposit"
+        // 2. Random proposal submission (Owner/Contributor roles only)
+        const proposers = possibleUsers.filter((u) => SIM_ROLES[u] === "owner" || SIM_ROLES[u] === "contributor");
+        if (proposers.length === 0) return;
+        const randomUser = proposers[Math.floor(Math.random() * proposers.length)];
+        const proposals = [
+          { desc: "Developer stipend for backend fixes", category: "Payroll" },
+          { desc: "Marketing audit and SEO tools subscription", category: "Marketing" },
+          { desc: "Stellar Horizon node hosting coverage", category: "Infrastructure" },
+          { desc: "SaaS integrations monthly payment", category: "Operations" },
+          { desc: "Security auditing services deposit", category: "Operations" }
         ];
-        const desc = descs[Math.floor(Math.random() * descs.length)];
+        const proposal = proposals[Math.floor(Math.random() * proposals.length)];
         const amt = Math.floor(Math.random() * 8 + 1) * 200; // 200 to 1600
         
-        simulatedSubmitRequest(randomUser, SIM_ACCOUNTS.RECIPIENT, amt, desc);
+        simulatedSubmitRequest(randomUser, SIM_ACCOUNTS.RECIPIENT, amt, proposal.category, proposal.desc);
         syncState();
         triggerNotification("info", `Real-time activity: ${getAccountLabel(randomUser)} submitted a new Spending Proposal for ${amt} USDC.`);
       } else if (eventType === 2) {
-        // 3. Random approval on a pending proposal
+        // 3. Random approval on a pending proposal (Owner/Approver roles only)
+        const approverPool = possibleUsers.filter((u) => SIM_ROLES[u] === "owner" || SIM_ROLES[u] === "approver");
+        if (approverPool.length === 0) return;
+        
         const pendingReqs = state.requests.filter((r) => r.status === 0);
         if (pendingReqs.length > 0) {
           const randomReq = pendingReqs[Math.floor(Math.random() * pendingReqs.length)];
           
           // Find if there is a background user who hasn't approved yet
-          const potentialApprovers = possibleUsers.filter((u) => {
+          const potentialApprovers = approverPool.filter((u) => {
             const sessionKey = `approved_${randomReq.id}_${u}`;
             return !localStorage.getItem(sessionKey);
           });
@@ -476,7 +488,7 @@ export default function Home() {
   // Submit Request Action
   const handleSubmitRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newRequest.recipient || !newRequest.amount || !newRequest.description) {
+    if (!newRequest.recipient || !newRequest.amount || !newRequest.category || !newRequest.description) {
       triggerNotification("error", "All fields are required to submit a spending request.");
       return;
     }
@@ -515,10 +527,11 @@ export default function Home() {
           activeSimUser,
           newRequest.recipient,
           amountVal,
+          newRequest.category,
           newRequest.description
         );
         syncState();
-        setNewRequest({ recipient: "", amount: "", description: "" });
+        setNewRequest({ recipient: "", amount: "", category: "Operations", description: "" });
         triggerNotification("success", "Spending request submitted successfully!");
       } else {
         if (!wallet.address) {
@@ -531,11 +544,12 @@ export default function Home() {
           wallet.address,
           newRequest.recipient,
           newRequest.amount,
+          newRequest.category,
           newRequest.description,
           wallet.walletProvider as WalletProviderId || "freighter"
         );
         triggerNotification("success", `Request submitted! Tx Hash: ${txHash.substring(0, 12)}...`);
-        setNewRequest({ recipient: "", amount: "", description: "" });
+        setNewRequest({ recipient: "", amount: "", category: "Operations", description: "" });
         syncState();
       }
     } catch (err: unknown) {
@@ -645,6 +659,12 @@ export default function Home() {
     }
   };
 
+  // Dashboard balances: Reserved = sum of pending requests, Available = total - reserved
+  const reservedBalance = requests
+    .filter((r) => r.status === 0)
+    .reduce((sum, r) => sum + (parseFloat(r.amount) || 0), 0);
+  const availableBalance = Math.max((parseFloat(vaultBalance) || 0) - reservedBalance, 0);
+
   return (
     <div className="flex-1 w-full max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
       
@@ -665,7 +685,10 @@ export default function Home() {
                 Secure V2
               </span>
             </h1>
-            <p className="text-xs text-slate-400 font-medium">Soroban Multi-Signature Treasury Control</p>
+            <p className="text-xs text-slate-400 font-medium">
+              {config.name} — {config.purpose}
+            </p>
+            <p className="text-xs text-slate-500 font-medium">Soroban Multi-Signature Treasury Control</p>
           </div>
         </div>
 
@@ -706,9 +729,9 @@ export default function Home() {
                 onChange={handleUserChange}
                 className="bg-transparent text-xs text-cyan-400 font-bold outline-none border-none cursor-pointer py-0.5"
               >
-                <option value={SIM_ACCOUNTS.ALICE} className="bg-slate-900 text-slate-100">Alice (Member)</option>
-                <option value={SIM_ACCOUNTS.BOB} className="bg-slate-900 text-slate-100">Bob (Member)</option>
-                <option value={SIM_ACCOUNTS.CHARLIE} className="bg-slate-900 text-slate-100">Charlie (Member)</option>
+                <option value={SIM_ACCOUNTS.ALICE} className="bg-slate-900 text-slate-100">Alice (Contributor)</option>
+                <option value={SIM_ACCOUNTS.BOB} className="bg-slate-900 text-slate-100">Bob (Approver)</option>
+                <option value={SIM_ACCOUNTS.CHARLIE} className="bg-slate-900 text-slate-100">Charlie (Viewer)</option>
                 <option value={SIM_ACCOUNTS.ADMIN} className="bg-slate-900 text-slate-100">Admin (Owner)</option>
               </select>
             </div>
@@ -903,6 +926,9 @@ export default function Home() {
           <h2 className="text-3xl font-extrabold text-white mt-2 tracking-tight">
             {parseFloat(vaultBalance).toLocaleString()} <span className="text-xs font-bold text-cyan-400 font-mono">USDC</span>
           </h2>
+          <p className="text-[10px] text-slate-400 mt-1.5 font-medium">
+            Reserved: <span className="text-amber-400 font-bold font-mono">{reservedBalance.toLocaleString()}</span> · Available: <span className="text-emerald-400 font-bold font-mono">{availableBalance.toLocaleString()}</span>
+          </p>
           {networkMode === "simulation" ? (
             <p className="text-[10px] text-slate-400 mt-2">
               Your mock wallet: <span className="text-cyan-400 font-bold font-mono">{parseFloat(getSimulatedUserBalance()).toLocaleString()} USDC</span>
@@ -1181,6 +1207,23 @@ export default function Home() {
               </div>
 
               <div>
+                <label htmlFor="category-input" className="block text-[9px] uppercase font-medium tracking-wider text-slate-400 mb-1.5 font-mono">Category</label>
+                <select
+                  id="category-input"
+                  value={newRequest.category}
+                  onChange={(e) => setNewRequest({ ...newRequest, category: e.target.value })}
+                  disabled={loadingAction === "submit_request"}
+                  className="w-full bg-slate-950/60 border border-slate-800/80 text-white rounded-lg py-2.5 px-3.5 text-sm font-medium outline-none focus:border-cyan-500/40 focus:ring-1 focus:ring-cyan-500/25 transition-all cursor-pointer"
+                >
+                  <option value="Operations" className="bg-slate-900">Operations</option>
+                  <option value="Payroll" className="bg-slate-900">Payroll</option>
+                  <option value="Marketing" className="bg-slate-900">Marketing</option>
+                  <option value="Infrastructure" className="bg-slate-900">Infrastructure</option>
+                  <option value="Other" className="bg-slate-900">Other</option>
+                </select>
+              </div>
+
+              <div>
                 <label htmlFor="desc-input" className="block text-[9px] uppercase font-medium tracking-wider text-slate-400 mb-1.5 font-mono">Proposal Description</label>
                 <textarea
                   id="desc-input"
@@ -1195,7 +1238,7 @@ export default function Home() {
 
               <button
                 type="submit"
-                disabled={loadingAction === "submit_request" || !newRequest.recipient || !newRequest.amount || !newRequest.description}
+                disabled={loadingAction === "submit_request" || !newRequest.recipient || !newRequest.amount || !newRequest.category || !newRequest.description}
                 className="w-full h-10 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-500 text-xs font-semibold text-white rounded-lg transition-all shadow-md shadow-blue-500/10 flex items-center justify-center gap-2 cursor-pointer border border-blue-400/10"
               >
                 {loadingAction === "submit_request" ? (
@@ -1257,6 +1300,9 @@ export default function Home() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-bold font-mono text-cyan-400">#{req.id}</span>
                           <span className="text-xs font-medium text-slate-200">{req.description}</span>
+                          <span className="text-[9px] uppercase px-2 py-0.5 rounded font-bold font-mono tracking-wider bg-blue-950/40 text-blue-300 border border-blue-900/50">
+                            {req.category}
+                          </span>
                           
                           {/* Muted Badge based on Status */}
                           {req.status === 0 ? (

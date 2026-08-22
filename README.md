@@ -88,8 +88,8 @@ All contracts are deployed on **Stellar Testnet**. Addresses are auto-loaded fro
 
 | Contract | Address |
 | :--- | :--- |
-| **Vault Core** | `CAE76V4RTBOADDXZGQZOOHIJZKTLWEI6MSUL5DM3UHVJ5MHALVON6MGW` |
-| **Vault Registry** | `CBQKUWSNFURGUV5LYPMMOK3YOWWPUUI2N6LSXIKQS3H745I2R7W5CMQU` |
+| **Vault Core** | `CCQ5XAGU6MBF2ZAHSGLK4LVP3RLLFKNZDT2TZRRLQR35Y4OSI7NUZFVP` |
+| **Vault Registry** | `CCEGGF7K4IVG63BMJRNLXGMN6TNSEJLXZUGKAX3KWE2SKRRHRAHNFSTW` |
 | **SAC Token (USDC)** | `CDT3PKODYDZDCDXJLO3PZ56GARG5SIDCDEEDTU7EBGPW3EITKCOWQOXW` |
 
 > **Admin/Owner address:** `GACYFFEF6TV4MNCRW5LYZ57PO6V3CAVZMGYBEHD4MG6IPYVXENE4XJQO`
@@ -120,8 +120,9 @@ All contracts are deployed on **Stellar Testnet**. Addresses are auto-loaded fro
 
 All transactions below are live on **Stellar Testnet** and verifiable on [Stellar Expert](https://stellar.expert/explorer/testnet).
 
-- [Vault Core Initialize TX](https://stellar.expert/explorer/testnet/tx/efeb0af4f07db267c428cb5a01cd91d360d69a5a9ad760ffba1b3c4abf444a05) — contract call initializing Vault Core with admin, USDC token, registry, signing threshold and member list (Aug 7, 2026)
-- [Vault Registry Initialize TX](https://stellar.expert/explorer/testnet/tx/bc7943b753a4e5cd1b47b0af057005c55fc4b82abde675b172a34ec993cfd4ed) — contract call initializing the Vault Registry admin (Aug 7, 2026)
+- [Vault Core Initialize TX](https://stellar.expert/explorer/testnet/tx/6372bd30b63fb34965efc090bdb77247b797914724057b531b0b6bff1e4a8ffa) — contract call initializing Vault Core with admin, USDC token, registry, signing threshold, member roles, vault name and purpose (Aug 22, 2026)
+- [Vault Registry Initialize TX](https://stellar.expert/explorer/testnet/tx/2caf6d1e582478c84c0a8beced3cce0450cb37e4f591522f4f6fd519614a2e5e) — contract call initializing the Vault Registry admin (Aug 22, 2026)
+- [Vault Registration TX](https://stellar.expert/explorer/testnet/tx/6372bd30b63fb34965efc090bdb77247b797914724057b531b0b6bff1e4a8ffa) — inter-contract call: Vault Core registered itself with the Vault Registry on initialization, emitting the `vault_registered` event (Aug 22, 2026)
 
 ---
 

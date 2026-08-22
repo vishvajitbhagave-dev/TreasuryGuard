@@ -54,7 +54,7 @@ describe("VaultLink Frontend Simulation Engine Tests", () => {
     const amount = 1000;
     const description = "Office supplies";
 
-    const newState = simulatedSubmitRequest(SIM_ACCOUNTS.ALICE, recipient, amount, description);
+    const newState = simulatedSubmitRequest(SIM_ACCOUNTS.ALICE, recipient, amount, "Operations", description);
 
     // Proposal count should increase
     expect(newState.requests.length).toBe(stateBefore.requests.length + 1);
@@ -114,7 +114,7 @@ describe("VaultLink Frontend Simulation Engine Tests", () => {
 
   it("should fail execution if vault balance is insufficient", () => {
     // Submit a request for an amount larger than the vault balance
-    simulatedSubmitRequest(SIM_ACCOUNTS.ALICE, SIM_ACCOUNTS.RECIPIENT, 50000, "Huge buy");
+    simulatedSubmitRequest(SIM_ACCOUNTS.ALICE, SIM_ACCOUNTS.RECIPIENT, 50000, "Operations", "Huge buy");
     const state = getSimulationState();
     const newReqId = state.requests[0].id;
 

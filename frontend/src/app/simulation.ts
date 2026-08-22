@@ -18,12 +18,22 @@ export const SIM_ACCOUNTS = {
   RECIPIENT: "G-RECIPIENT-MERCHANT-XXXXXXXXX-REC",
 };
 
+// Member roles mirrored from the on-chain contract (feature: member roles)
+export const SIM_ROLES: { [address: string]: string } = {
+  [SIM_ACCOUNTS.ADMIN]: "owner",
+  [SIM_ACCOUNTS.ALICE]: "contributor",
+  [SIM_ACCOUNTS.BOB]: "approver",
+  [SIM_ACCOUNTS.CHARLIE]: "viewer",
+};
+
 const DEFAULT_STATE: SimState = {
   config: {
     admin: SIM_ACCOUNTS.ADMIN,
     token: "C-MOCK-USDC-TOKEN-XXXXXXXXXXXXX-USD",
     registry: "C-REGISTRY-CONTRACT-XXXXXXXXXXX-REG",
     threshold: 2,
+    name: "Team Treasury",
+    purpose: "Shared multi-sig fund for group expenses",
   },
   members: [SIM_ACCOUNTS.ALICE, SIM_ACCOUNTS.BOB, SIM_ACCOUNTS.CHARLIE],
   requests: [
@@ -31,6 +41,7 @@ const DEFAULT_STATE: SimState = {
       id: 1,
       recipient: SIM_ACCOUNTS.RECIPIENT,
       amount: "1500",
+      category: "Infrastructure",
       description: "Server hosting and infrastructure bill - Q3",
       approvalsCount: 1,
       status: 0, // Pending
@@ -41,21 +52,23 @@ const DEFAULT_STATE: SimState = {
       id: 2,
       recipient: "G-DEVELOPER-FEE-XXXXXXXXXXXXXXX-DEV",
       amount: "2500",
+      category: "Payroll",
       description: "Frontend development services - Milestone 1",
       approvalsCount: 2,
       status: 1, // Executed
       createdAt: Date.now() - 3600000 * 12, // 12 hours ago
-      proposer: SIM_ACCOUNTS.BOB,
+      proposer: SIM_ACCOUNTS.ALICE,
     },
     {
       id: 3,
       recipient: "G-MARKETING-AGENCY-XXXXXXXXXXXXX-MKT",
       amount: "800",
+      category: "Marketing",
       description: "Social media ad campaign (cancelled)",
       approvalsCount: 0,
       status: 2, // Cancelled
       createdAt: Date.now() - 3600000 * 3, // 3 hours ago
-      proposer: SIM_ACCOUNTS.CHARLIE,
+      proposer: SIM_ACCOUNTS.ALICE,
     },
   ],
   balance: "8500",
@@ -85,14 +98,14 @@ const DEFAULT_STATE: SimState = {
       id: "a4",
       timestamp: Date.now() - 3600000 * 23,
       type: "approve_request",
-      user: SIM_ACCOUNTS.ALICE,
+      user: SIM_ACCOUNTS.BOB,
       details: "Approved Request #1",
     },
     {
       id: "a5",
       timestamp: Date.now() - 3600000 * 12,
       type: "submit_request",
-      user: SIM_ACCOUNTS.BOB,
+      user: SIM_ACCOUNTS.ALICE,
       details: "Submitted Request #2: Frontend development for 2,500 USDC",
     },
     {
@@ -106,7 +119,7 @@ const DEFAULT_STATE: SimState = {
       id: "a7",
       timestamp: Date.now() - 3600000 * 11,
       type: "approve_request",
-      user: SIM_ACCOUNTS.ALICE,
+      user: SIM_ACCOUNTS.ADMIN,
       details: "Approved Request #2 (Threshold met)",
     },
     {
@@ -179,6 +192,7 @@ export const simulatedSubmitRequest = (
   proposer: string,
   recipient: string,
   amount: number,
+  category: string,
   description: string
 ): SimState => {
   const state = getSimulationState();
@@ -188,6 +202,7 @@ export const simulatedSubmitRequest = (
     id: nextId,
     recipient,
     amount: amount.toString(),
+    category,
     description,
     approvalsCount: 0,
     status: 0, // Pending
@@ -202,7 +217,7 @@ export const simulatedSubmitRequest = (
     timestamp: Date.now(),
     type: "submit_request",
     user: proposer,
-    details: `Submitted Request #${nextId}: ${description} for ${amount} USDC`,
+    details: `Submitted Request #${nextId} [${category}]: ${description} for ${amount} USDC`,
   };
   state.activities = [newActivity, ...state.activities];
   saveSimulationState(state);
