@@ -15,6 +15,7 @@ import {
   simulatedApproveRequest, 
   simulatedExecuteRequest, 
   simulatedCancelRequest, 
+  simulatedSetPaused, 
   resetSimulation,
   SIM_ACCOUNTS,
   SIM_ROLES,
@@ -28,6 +29,8 @@ import {
   approveRequestInVault,
   executeRequestInVault,
   cancelRequestInVault,
+  setVaultPaused,
+  fetchVaultPaused,
   establishTrustline,
   fetchVaultBalance,
   fetchContractRequests,
@@ -77,6 +80,7 @@ export default function Home() {
   
   // Forms State
   const [depositAmount, setDepositAmount] = useState<string>("");
+  const [paused, setPaused] = useState<boolean>(false);
   const [newRequest, setNewRequest] = useState({
     recipient: "",
     amount: "",
@@ -135,17 +139,24 @@ export default function Home() {
       setActivities(state.activities);
       setVaultBalance(state.balance);
       setUserBalances(state.userBalances);
+      setPaused(state.paused);
     } else {
       // Testnet Mode: load configs from contract
       try {
         const liveConfig = await fetchContractConfig(CONTRACTS.vaultId);
         setConfig(liveConfig);
-        
+
         const balance = await fetchVaultBalance(CONTRACTS.vaultId);
         setVaultBalance(balance);
-        
+
         const liveRequests = await fetchContractRequests(CONTRACTS.vaultId);
         setRequests(liveRequests);
+
+        try {
+          setPaused(await fetchVaultPaused(CONTRACTS.vaultId));
+        } catch {
+          setPaused(false);
+        }
         
         if (wallet.address) {
           const tokenBal = await fetchTokenBalance(CONTRACTS.tokenId, wallet.address);
@@ -597,6 +608,11 @@ export default function Home() {
 
   // Execute Request Action
   const handleExecuteRequest = async (id: number) => {
+    // Emergency pause: withdrawals are blocked while the vault is paused
+    if (paused) {
+      triggerNotification("error", "Emergency pause is active: withdrawals are temporarily blocked by the Owner.");
+      return;
+    }
     setLoadingAction(`execute_${id}`);
     try {
       if (networkMode === "simulation") {
@@ -648,6 +664,35 @@ export default function Home() {
           return;
         }
         const txHash = await trackTransaction(`Request #${id} cancellation`, () => cancelRequestInVault(CONTRACTS.vaultId, wallet.address!, id, wallet.walletProvider as WalletProviderId || "freighter"));
+        if (!txHash) return;
+        syncState();
+      }
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      triggerNotification("error", errorMsg);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  // Emergency Pause Toggle (Owner Only)
+  const handleTogglePause = async () => {
+    const next = !paused;
+    setLoadingAction("toggle_pause");
+    try {
+      if (networkMode === "simulation") {
+        simulatedSetPaused(activeSimUser, next);
+        syncState();
+        triggerNotification("info", next
+          ? "Emergency pause activated: withdrawals are blocked until the Owner resumes them."
+          : "Emergency pause lifted: withdrawals can resume.");
+      } else {
+        if (!wallet.address) {
+          triggerNotification("error", "Please connect a wallet first.");
+          setLoadingAction(null);
+          return;
+        }
+        const txHash = await trackTransaction(next ? "Vault pause" : "Vault resume", () => setVaultPaused(CONTRACTS.vaultId, wallet.address!, next, wallet.walletProvider as WalletProviderId || "freighter"));
         if (!txHash) return;
         syncState();
       }
@@ -718,6 +763,30 @@ export default function Home() {
               Stellar Testnet
             </button>
           </div>
+
+          {/* Emergency Pause Control (Owner Only) */}
+          {(networkMode === "simulation"
+            ? activeSimUser === SIM_ACCOUNTS.ADMIN
+            : wallet.address !== null && wallet.address === config.admin) && (
+            <div className="flex items-center gap-2">
+              {paused && (
+                <span className="text-[9px] uppercase px-2 py-0.5 rounded font-bold font-mono tracking-wider bg-red-950/50 text-red-400 border border-red-900/60 animate-pulse">
+                  Withdrawals Paused
+                </span>
+              )}
+              <button
+                onClick={handleTogglePause}
+                disabled={loadingAction === "toggle_pause"}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border cursor-pointer disabled:opacity-50 ${
+                  paused
+                    ? "bg-emerald-950/40 text-emerald-400 border-emerald-900/60 hover:bg-emerald-900/40"
+                    : "bg-red-950/40 text-red-400 border-red-900/60 hover:bg-red-900/40"
+                }`}
+              >
+                {loadingAction === "toggle_pause" ? "Processing..." : paused ? "Resume Withdrawals" : "Emergency Pause"}
+              </button>
+            </div>
+          )}
 
           {/* Identity Switcher (Simulation Only) */}
           {networkMode === "simulation" ? (

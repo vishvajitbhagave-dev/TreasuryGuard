@@ -24,6 +24,7 @@ pub enum Error {
     InvalidRole = 8,
     AmountExceedsLimit = 9,
     CategoryRestricted = 10,
+    VaultPaused = 11,
 }
 
 // Member roles: Owner manages rules/members and can do everything,
@@ -93,6 +94,7 @@ pub enum DataKey {
     Members,       // Vec<Address>
     Roles,         // Map<Address, Role>
     Rules,         // SpendingRules
+    Paused,        // bool
     Request(u64),
     Approved(u64, Address),
     RequestCount,
@@ -301,6 +303,11 @@ impl VaultContract {
         // Only Owner and Approver may execute
         Self::require_role(&env, &executor, &[Role::Owner, Role::Approver])?;
 
+        // Emergency pause: withdrawals are blocked while the vault is paused
+        if Self::is_paused_internal(&env) {
+            return Err(Error::VaultPaused);
+        }
+
         let config: VaultConfig = env.storage().instance().get(&DataKey::Config).unwrap();
 
         let mut request: SpendingRequest = env
@@ -396,6 +403,37 @@ impl VaultContract {
             max_request_amount: 0,
             blocked_categories: Vec::new(&env),
         })
+    }
+
+    // Emergency pause (Owner only). While paused, withdrawals cannot execute;
+    // deposits, submissions and approvals are unaffected.
+    pub fn set_paused(env: Env, caller: Address, paused: bool) -> Result<(), Error> {
+        caller.require_auth();
+        Self::require_role(&env, &caller, &[Role::Owner])?;
+
+        env.storage().instance().set(&DataKey::Paused, &paused);
+
+        let config: VaultConfig = env.storage().instance().get(&DataKey::Config).unwrap();
+        let registry_client = RegistryClient::new(&env, &config.registry);
+        registry_client.log_activity(&caller, &Symbol::new(&env, "set_paused"));
+
+        env.events().publish(
+            (Symbol::new(&env, "pause_state_changed"), caller),
+            paused,
+        );
+
+        Ok(())
+    }
+
+    pub fn is_paused(env: Env) -> bool {
+        Self::is_paused_internal(&env)
+    }
+
+    fn is_paused_internal(env: &Env) -> bool {
+        env.storage()
+            .instance()
+            .get::<DataKey, bool>(&DataKey::Paused)
+            .unwrap_or(false)
     }
 
     // Member management (Owner only). Upserts a member with the given role.
@@ -772,5 +810,85 @@ mod test {
             &str(&env, "Blocked category"),
         );
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_emergency_pause() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let contributor = Address::generate(&env);
+        let recipient = Address::generate(&env);
+
+        let registry_address = Address::generate(&env);
+        env.register_contract(&registry_address, MockRegistry);
+
+        let token_admin = Address::generate(&env);
+        let token_id = env.register_stellar_asset_contract(token_admin.clone());
+        let token_client = soroban_sdk::token::StellarAssetClient::new(&env, &token_id);
+        token_client.mint(&contributor, &1000i128);
+
+        let vault_address = Address::generate(&env);
+        env.register_contract(&vault_address, VaultContract);
+        let vault_client = VaultContractClient::new(&env, &vault_address);
+
+        let mut members = Vec::new(&env);
+        members.push_back(contributor.clone());
+
+        let mut roles = Vec::new(&env);
+        roles.push_back(str(&env, "contributor"));
+
+        vault_client.initialize(
+            &admin,
+            &token_id,
+            &registry_address,
+            &1u32,
+            &members,
+            &roles,
+            &str(&env, "Team Treasury"),
+            &str(&env, "Purpose"),
+        );
+
+        assert!(!vault_client.is_paused());
+
+        vault_client.deposit(&contributor, &500i128);
+        let req_id = vault_client.submit_request(
+            &contributor,
+            &recipient,
+            &100i128,
+            &str(&env, "Operations"),
+            &str(&env, "Repair roof"),
+        );
+        vault_client.approve_request(&admin, &req_id);
+
+        // Non-owner cannot toggle the pause
+        let res = vault_client.try_set_paused(&contributor, &true);
+        assert!(res.is_err());
+        assert!(!vault_client.is_paused());
+
+        // Owner pauses the vault
+        vault_client.set_paused(&admin, &true);
+        assert!(vault_client.is_paused());
+
+        // Withdrawals are blocked while paused
+        let res = vault_client.try_execute_request(&admin, &req_id);
+        assert!(res.is_err());
+
+        // Approvals and submissions still work while paused (withdrawals only)
+        let req2 = vault_client.submit_request(
+            &contributor,
+            &recipient,
+            &50i128,
+            &str(&env, "Operations"),
+            &str(&env, "While paused"),
+        );
+        vault_client.approve_request(&admin, &req2);
+
+        // Owner unpauses and the pending withdrawal executes
+        vault_client.set_paused(&admin, &false);
+        assert!(!vault_client.is_paused());
+        vault_client.execute_request(&admin, &req_id);
+        assert_eq!(vault_client.get_request(&req_id).status, 1);
     }
 }

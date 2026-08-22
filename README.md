@@ -88,8 +88,8 @@ All contracts are deployed on **Stellar Testnet**. Addresses are auto-loaded fro
 
 | Contract | Address |
 | :--- | :--- |
-| **Vault Core** | `CCQ5XAGU6MBF2ZAHSGLK4LVP3RLLFKNZDT2TZRRLQR35Y4OSI7NUZFVP` |
-| **Vault Registry** | `CCEGGF7K4IVG63BMJRNLXGMN6TNSEJLXZUGKAX3KWE2SKRRHRAHNFSTW` |
+| **Vault Core** | `CDCIWHL7F7VO3EVXFENCNWYXOQKVVLZXVLWNPERFMVFZ6TZ3Y34D7GBQ` |
+| **Vault Registry** | `CC5QV5MIM5M2DGUDRSAAWXAZI5PY2SUD5TL474XQAC5HVWTXIZHCNUNN` |
 | **SAC Token (USDC)** | `CDT3PKODYDZDCDXJLO3PZ56GARG5SIDCDEEDTU7EBGPW3EITKCOWQOXW` |
 
 > **Admin/Owner address:** `GACYFFEF6TV4MNCRW5LYZ57PO6V3CAVZMGYBEHD4MG6IPYVXENE4XJQO`
@@ -120,9 +120,10 @@ All contracts are deployed on **Stellar Testnet**. Addresses are auto-loaded fro
 
 All transactions below are live on **Stellar Testnet** and verifiable on [Stellar Expert](https://stellar.expert/explorer/testnet).
 
-- [Vault Core Initialize TX](https://stellar.expert/explorer/testnet/tx/6372bd30b63fb34965efc090bdb77247b797914724057b531b0b6bff1e4a8ffa) — contract call initializing Vault Core with admin, USDC token, registry, signing threshold, member roles, vault name and purpose (Aug 22, 2026)
-- [Vault Registry Initialize TX](https://stellar.expert/explorer/testnet/tx/2caf6d1e582478c84c0a8beced3cce0450cb37e4f591522f4f6fd519614a2e5e) — contract call initializing the Vault Registry admin (Aug 22, 2026)
-- [Vault Registration TX](https://stellar.expert/explorer/testnet/tx/6372bd30b63fb34965efc090bdb77247b797914724057b531b0b6bff1e4a8ffa) — inter-contract call: Vault Core registered itself with the Vault Registry on initialization, emitting the `vault_registered` event (Aug 22, 2026)
+- [Vault Core Initialize TX](https://stellar.expert/explorer/testnet/tx/80eea5ce78ab0d5d17d64129037da64a1a2fa73c7fe4919be9e997e09de96804) — contract call initializing Vault Core with admin, USDC token, registry, signing threshold, member roles, vault name and purpose (Aug 22, 2026)
+- [Vault Registry Initialize TX](https://stellar.expert/explorer/testnet/tx/726a1022690fc388cddf226e48c68bfbc336206810a0603588cb404bcca85325) — contract call initializing the Vault Registry admin (Aug 22, 2026)
+- [Vault Registration TX](https://stellar.expert/explorer/testnet/tx/80eea5ce78ab0d5d17d64129037da64a1a2fa73c7fe4919be9e997e09de96804) — inter-contract call: Vault Core registered itself with the Vault Registry on initialization, emitting the `vault_registered` event (Aug 22, 2026)
+- [Emergency Pause TX](https://stellar.expert/explorer/testnet/tx/84e9d5ea7f5b97cbabeeb4a15ad440a2b1504934ea0266bca73dc02480e936ce) — Owner activated the emergency pause (`set_paused`), blocking withdrawals on-chain; followed by a resume transaction restoring normal operation (Aug 22, 2026)
 
 ---
 

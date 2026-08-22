@@ -341,6 +341,32 @@ export async function depositToVault(
   return invokeContractMethod(vaultId, "deposit", args, fromAddress, providerId);
 }
 
+/**
+ * Emergency pause toggle (Owner only). While paused, withdrawals cannot execute.
+ */
+export async function setVaultPaused(
+  vaultId: string,
+  caller: string,
+  paused: boolean,
+  providerId: WalletProviderId = "freighter"
+): Promise<string> {
+  const args = [
+    StellarSdk.nativeToScVal(caller, { type: "address" }),
+    StellarSdk.nativeToScVal(paused),
+  ];
+  return invokeContractMethod(vaultId, "set_paused", args, caller, providerId);
+}
+
+export async function fetchVaultPaused(vaultId: string): Promise<boolean> {
+  try {
+    const result = await invokeReadOnlyMethod(vaultId, "is_paused");
+    return String(result) === "true";
+  } catch (err) {
+    console.error("Error fetching vault pause state:", err);
+    return false;
+  }
+}
+
 export async function submitRequestToVault(
   vaultId: string,
   proposer: string,

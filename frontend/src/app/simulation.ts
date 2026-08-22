@@ -7,6 +7,7 @@ export interface SimState {
   balance: string;
   activities: ActivityLog[];
   userBalances: { [address: string]: string };
+  paused: boolean;
 }
 
 // Predefined mock addresses
@@ -136,6 +137,7 @@ const DEFAULT_STATE: SimState = {
     [SIM_ACCOUNTS.BOB]: "800",
     [SIM_ACCOUNTS.CHARLIE]: "3000",
   },
+  paused: false,
 };
 
 // Key used to store simulated blockchain state in localStorage
@@ -149,7 +151,8 @@ export const getSimulationState = (): SimState => {
     return DEFAULT_STATE;
   }
   try {
-    return JSON.parse(data);
+    // Merge with defaults so states saved before new fields (e.g. paused) stay valid
+    return { ...DEFAULT_STATE, ...JSON.parse(data) };
   } catch {
     return DEFAULT_STATE;
   }
@@ -164,6 +167,23 @@ const saveSimulationState = (state: SimState) => {
 export const resetSimulation = (): SimState => {
   saveSimulationState(DEFAULT_STATE);
   return DEFAULT_STATE;
+};
+
+// Emergency pause toggle (Owner only). While paused, withdrawals are blocked.
+export const simulatedSetPaused = (caller: string, paused: boolean): SimState => {
+  const state = getSimulationState();
+  state.paused = paused;
+
+  const newActivity: ActivityLog = {
+    id: `a${Date.now()}`,
+    timestamp: Date.now(),
+    type: "set_paused",
+    user: caller,
+    details: paused ? "Emergency pause activated - withdrawals blocked" : "Emergency pause lifted - withdrawals resumed",
+  };
+  state.activities = [newActivity, ...state.activities];
+  saveSimulationState(state);
+  return state;
 };
 
 export const simulatedDeposit = (from: string, amount: number): SimState => {
